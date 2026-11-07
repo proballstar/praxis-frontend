@@ -20,7 +20,8 @@ export async function load(): Promise<Service> {
   // that would overwrite it on the next tap.
   const parsed: unknown = JSON.parse(raw);
   if (!isService(parsed)) throw Error(`Unrecognized data in ${file()}`);
-  return parsed;
+  // Saves made before packing time existed get the default.
+  return { ...parsed, packMinutes: parsed.packMinutes ?? 2 };
 }
 
 async function save(service: Service) {

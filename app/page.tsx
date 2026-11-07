@@ -177,6 +177,7 @@ export default function Home() {
     name: service.name,
     stations: service.stations,
     graceMinutes: service.graceMinutes,
+    packMinutes: service.packMinutes,
     menu: service.menu,
   };
 
@@ -253,7 +254,11 @@ export default function Home() {
             plan={plan}
             now={planningMoment}
             onApply={async () => {
-              await dispatch({ type: "applyPlan", sequence: plan.best.sequence });
+              await dispatch({
+                type: "applyPlan",
+                sequence: plan.best.sequence,
+                baseRev: service.rev,
+              });
               setSheet(null);
             }}
           />

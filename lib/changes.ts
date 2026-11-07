@@ -33,6 +33,8 @@ export type Change = {
 };
 
 export type Proposal = {
+  /** Board version the numbers were computed on. Approval is refused after it changes. */
+  baseRev: number;
   lines: string[];
   actions: Action[];
   before: Metrics;
@@ -127,6 +129,7 @@ export function compile(s: Service, changes: Change[]) {
           name: s.name,
           stations,
           graceMinutes: s.graceMinutes,
+          packMinutes: s.packMinutes,
           menu: s.menu,
         };
         actions.push({ type: "configure", settings });
@@ -180,14 +183,20 @@ export function simulate(s: Service, now: number, changes: Change[]) {
   const before = planFor(s, now).current.metrics;
   const next = reduce(
     s,
-    { type: "batch", label: "simulation", actions },
+    { type: "batch", label: "simulation", baseRev: s.rev, actions },
     now,
     ((n) => () => `simulated-${++n}`)(0),
   );
   const p = planFor(next, now);
   const clock = new Map(p.current.slots.map((x) => [x.id, x]));
   return {
-    proposal: { lines, actions, before, after: p.current.metrics } as Proposal,
+    proposal: {
+      baseRev: s.rev,
+      lines,
+      actions,
+      before,
+      after: p.current.metrics,
+    } as Proposal,
     facts: {
       changes: lines,
       before,

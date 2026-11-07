@@ -34,7 +34,7 @@ function kitchen(stations = 1): Service {
         settings: {
           name: "Test Kitchen",
           stations,
-          graceMinutes: 2,
+          graceMinutes: 2, packMinutes: 0,
           menu: [{ id: "m1", name: "Bowl", minutes: 6 }],
         },
       },
@@ -79,7 +79,7 @@ test("nothing works until the kitchen is set up", () => {
         emptyService(),
         {
           type: "configure",
-          settings: { name: " ", stations: 2, graceMinutes: 5, menu: [] },
+          settings: { name: " ", stations: 2, graceMinutes: 5, packMinutes: 0, menu: [] },
         },
         T0,
       ),
@@ -198,7 +198,7 @@ test("real clock: the delay scenario produces the recommendation", () => {
   assert.equal(dismissed.dismissedPlan, planKey(p.best.sequence));
   assert.equal(recommendation(dismissed, p), false);
 
-  const applied = run(s, [{ type: "applyPlan", sequence: p.best.sequence }], 4);
+  const applied = run(s, [{ type: "applyPlan", sequence: p.best.sequence, baseRev: s.rev }], 4);
   assert.deepEqual(applied.queue, p.best.sequence);
   const after = planFor(applied, at(4));
   assert.equal(after.current.metrics.wait, 20);
@@ -211,11 +211,14 @@ test("a plan reviewed against an older board is refused", () => {
   const sequence = [...s.queue].reverse();
   const changed = withOrders(s, ["3", 5, 9]);
   assert.throws(
-    () => run(changed, [{ type: "applyPlan", sequence }]),
+    () => run(changed, [{ type: "applyPlan", sequence, baseRev: s.rev }]),
     /board changed/,
   );
   assert.throws(
-    () => run(s, [{ type: "applyPlan", sequence: [s.queue[0], s.queue[0]] }]),
+    () =>
+      run(s, [
+        { type: "applyPlan", sequence: [s.queue[0], s.queue[0]], baseRev: s.rev },
+      ]),
     /board changed/,
   );
 });
@@ -264,7 +267,7 @@ test("undo reverses the last change, repeatedly", () => {
 
 test("stations in use cannot be removed; removing others drops old undo", () => {
   const settings = (stations: number) =>
-    ({ name: "K", stations, graceMinutes: 2, menu: [] });
+    ({ name: "K", stations, graceMinutes: 2, packMinutes: 0, menu: [] });
   let s = withOrders(kitchen(3), ["1", 5, 9], ["2", 5, 9], ["3", 5, 9]);
   s = run(s, [
     { type: "start", id: id(s, "1") },
@@ -361,7 +364,7 @@ test("store survives restarts, serializes writers, and protects bad data", async
   assert.equal((await load()).configured, false);
   await apply({
     type: "configure",
-    settings: { name: "K", stations: 2, graceMinutes: 5, menu: [] },
+    settings: { name: "K", stations: 2, graceMinutes: 5, packMinutes: 0, menu: [] },
   });
   const added = await Promise.all(
     Array.from({ length: 25 }, (_, i) =>
@@ -384,9 +387,36 @@ test("store survives restarts, serializes writers, and protects bad data", async
   await assert.rejects(() =>
     apply({
       type: "configure",
-      settings: { name: "K", stations: 2, graceMinutes: 5, menu: [] },
+      settings: { name: "K", stations: 2, graceMinutes: 5, packMinutes: 0, menu: [] },
     }),
   );
   assert.equal(readFileSync(file, "utf8"), "{broken");
   delete process.env.PRAXIS_DATA_FILE;
+});
+
+test("an approval is refused once the board has changed since it was shown", () => {
+  const s = withOrders(kitchen(), ["1", 5, 9], ["2", 5, 9]);
+  const shown = s.rev;
+  const actions: Action[] = [{ type: "cancel", id: id(s, "1") }];
+  // Someone else taps Start on another device after the proposal was made.
+  const moved = run(s, [{ type: "start", id: id(s, "2") }]);
+  assert.throws(
+    () => run(moved, [{ type: "batch", label: "x", baseRev: shown, actions }]),
+    /out of date/,
+  );
+  // With the current revision, the same approval is accepted.
+  const ok = run(moved, [
+    { type: "batch", label: "x", baseRev: moved.rev, actions },
+  ]);
+  assert.equal(ok.orders[0].status, "cancelled");
+});
+
+test("a double-tapped approval applies once", () => {
+  const s = withOrders(kitchen(), ["1", 5, 9]);
+  const actions: Action[] = [{ type: "cancel", id: id(s, "1") }];
+  const first = run(s, [{ type: "batch", label: "x", baseRev: s.rev, actions }]);
+  assert.throws(
+    () => run(first, [{ type: "batch", label: "x", baseRev: s.rev, actions }]),
+    /out of date/,
+  );
 });

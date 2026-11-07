@@ -3,6 +3,7 @@ import { FormEvent, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { KitchenSettings, MAX_STATIONS, MenuItem } from "@/lib/service";
 import { Button, Field, inputClass } from "./ui";
+import { DictateDish } from "./DictateDish";
 
 export function KitchenForm({
   initial,
@@ -16,6 +17,7 @@ export function KitchenForm({
   const [name, setName] = useState(initial.name);
   const [stations, setStations] = useState(String(initial.stations));
   const [grace, setGrace] = useState(String(initial.graceMinutes));
+  const [pack, setPack] = useState(String(initial.packMinutes ?? 2));
   const [menu, setMenu] = useState<MenuItem[]>(initial.menu);
   const [busy, setBusy] = useState(false);
 
@@ -29,6 +31,7 @@ export function KitchenForm({
       name,
       stations: Number(stations),
       graceMinutes: Number(grace),
+      packMinutes: Number(pack),
       menu,
     });
     setBusy(false);
@@ -45,7 +48,7 @@ export function KitchenForm({
           onChange={(e) => setName(e.target.value)}
         />
       </Field>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <Field
           label="Cooking stations"
           hint="Orders you can cook at the same time"
@@ -59,6 +62,21 @@ export function KitchenForm({
             required
             value={stations}
             onChange={(e) => setStations(e.target.value)}
+          />
+        </Field>
+        <Field
+          label="Packing (min)"
+          hint="Bagging and checking after cooking, before ready"
+        >
+          <input
+            className={inputClass}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={30}
+            required
+            value={pack}
+            onChange={(e) => setPack(e.target.value)}
           />
         </Field>
         <Field
@@ -121,17 +139,26 @@ export function KitchenForm({
             </div>
           ))}
         </div>
-        <Button
-          className="mt-2"
-          onClick={() =>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button
+            onClick={() =>
+              setMenu((m) => [
+                ...m,
+                { id: crypto.randomUUID(), name: "", minutes: 8 },
+              ])
+            }
+          >
+            <Plus size={16} /> Add dish
+          </Button>
+        </div>
+        <DictateDish
+          onHeard={(dish) =>
             setMenu((m) => [
               ...m,
-              { id: crypto.randomUUID(), name: "", minutes: 8 },
+              { id: crypto.randomUUID(), name: dish.name, minutes: dish.minutes },
             ])
           }
-        >
-          <Plus size={16} /> Add dish
-        </Button>
+        />
       </fieldset>
       <Button tone="primary" type="submit" disabled={busy} className="w-full">
         {submitLabel}

@@ -22,7 +22,7 @@ function board(): Service {
       settings: {
         name: "K",
         stations: 1,
-        graceMinutes: 2,
+        graceMinutes: 2, packMinutes: 0,
         menu: [
           { id: "1", name: "Burger", minutes: 8 },
           { id: "2", name: "Salad", minutes: 4 },
@@ -142,7 +142,7 @@ test("approved changes apply together, and one undo reverses them", () => {
     { kind: "cancel", ticket: "1043" },
     { kind: "apply_recommended" },
   ]);
-  const next = reduce(s, { type: "batch", label: "changes", actions }, T0);
+  const next = reduce(s, { type: "batch", label: "changes", baseRev: s.rev, actions }, T0);
   assert.equal(next.rev, s.rev + 1);
   assert.equal(next.orders[1].status, "cancelled");
   const undone = reduce(next, { type: "undo" }, T0);
@@ -156,13 +156,13 @@ test("a batch with one bad change applies nothing", () => {
     { type: "cancel", id: "id2" },
     { type: "cancel", id: "missing" },
   ];
-  assert.throws(() => reduce(s, { type: "batch", label: "x", actions }, T0));
+  assert.throws(() => reduce(s, { type: "batch", label: "x", baseRev: s.rev, actions }, T0));
   assert.equal(s.orders[1].status, "queued");
   assert.throws(
     () =>
       reduce(
         s,
-        { type: "batch", label: "x", actions: [{ type: "undo" }] },
+        { type: "batch", label: "x", baseRev: s.rev, actions: [{ type: "undo" }] },
         T0,
       ),
     /together/,
@@ -218,7 +218,12 @@ test("the agent can only propose; the proposal still needs a tap", async () => {
   assert.equal(s.orders[0].extra, 0);
   const applied = reduce(
     s,
-    { type: "batch", label: "x", actions: r.proposal!.actions },
+    {
+      type: "batch",
+      label: "x",
+      baseRev: r.proposal!.baseRev,
+      actions: r.proposal!.actions,
+    },
     T0,
   );
   assert.equal(applied.orders[0].extra, 8);
@@ -265,7 +270,7 @@ test("the route speaks OpenRouter's format and falls back on failure", async () 
     settings: {
       name: "K",
       stations: 1,
-      graceMinutes: 2,
+      graceMinutes: 2, packMinutes: 0,
       menu: [{ id: "1", name: "Burger", minutes: 8 }],
     },
   });

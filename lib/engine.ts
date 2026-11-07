@@ -1,15 +1,30 @@
 /**
  * Deterministic preparation planner. Pure: no clock, storage, or AI.
  * All times are whole minutes relative to `now` (0 unless a caller says otherwise).
+ *
+ * Definitions (see README "Planner definitions"):
+ * - remaining: cooking minutes still needed on a station. A station is one
+ *   preparation lane; any lane can cook any queued order.
+ * - pack: packing minutes after cooking ends, before the order is ready for
+ *   pickup. Packing does not occupy the station.
+ * - ready = cooking end + pack.
+ * - courier wait: minutes the courier stands at the counter before ready.
+ * - food sitting: minutes ready food waits for the courier to arrive.
+ * - late: minutes ready after the pickup deadline.
+ * - aged: minutes an order has waited past AGING_LIMIT before cooking starts.
  */
 export type Job = {
   id: string;
-  /** Minutes of work left. */
+  /** Minutes of cooking work left. */
   remaining: number;
+  /** Packing minutes after cooking ends. Defaults to 0. */
+  pack?: number;
   /** When the courier is expected. */
   arrival: number;
-  /** Latest acceptable handoff. */
+  /** Latest acceptable pickup-ready time. */
   deadline: number;
+  /** When the order was received. Used only for aging. Omit to skip aging. */
+  received?: number;
   /** Cooking on this 1-based station. Never moved or interrupted. */
   station?: number;
 };
@@ -19,9 +34,12 @@ export type Slot = {
   lane: number;
   start: number;
   end: number;
+  /** Ready for pickup (end + packing). */
+  ready: number;
   driverWait: number;
   foodIdle: number;
   late: number;
+  aged: number;
   /** Deliberately not started yet, so food is not ready long before the courier. */
   held: boolean;
 };
@@ -31,6 +49,7 @@ export type Metrics = {
   idle: number;
   late: number;
   lateness: number;
+  aged: number;
   score: number;
 };
 
@@ -45,7 +64,9 @@ export type Plan = {
 
 export type Options = { stations: number; now?: number };
 
-export const WEIGHTS = { late: 5, wait: 2, idle: 1 };
+export const WEIGHTS = { late: 5, wait: 2, idle: 1, aged: 3 };
+/** An order may wait this long for a station before aging penalties start. */
+export const AGING_LIMIT = 20;
 /** Start held orders this long before the courier, as cover for estimates running over. */
 export const HOLD_BUFFER = 2;
 /** Above this many queued orders, exhaustive search is replaced by the heuristic. */
@@ -77,15 +98,22 @@ export function schedule(
   const slots: Slot[] = [];
   const place = (j: Job, lane: number, start: number, held: boolean) => {
     const end = start + j.remaining;
+    const ready = end + (j.pack ?? 0);
     free[lane] = end;
     slots.push({
       id: j.id,
       lane,
       start,
       end,
-      driverWait: Math.max(0, end - j.arrival),
-      foodIdle: Math.max(0, j.arrival - end),
-      late: Math.max(0, end - j.deadline),
+      ready,
+      driverWait: Math.max(0, ready - j.arrival),
+      foodIdle: Math.max(0, j.arrival - ready),
+      late: Math.max(0, ready - j.deadline),
+      // A deliberate hold is not neglect, so only unheld waiting ages.
+      aged:
+        j.received === undefined || held
+          ? 0
+          : Math.max(0, start - j.received - AGING_LIMIT),
       held,
     });
   };
@@ -100,7 +128,7 @@ export function schedule(
   for (const id of sequence) {
     const j = byId.get(id)!;
     const lane = free.indexOf(Math.min(...free));
-    const fire = j.arrival - j.remaining - HOLD_BUFFER;
+    const fire = j.arrival - (j.pack ?? 0) - j.remaining - HOLD_BUFFER;
     const start = Math.max(free[lane], now, fire);
     place(j, lane, start, fire > free[lane] && fire > now);
   }
@@ -114,13 +142,15 @@ export function metrics(slots: Slot[]): Metrics {
       idle: m.idle + s.foodIdle,
       late: m.late + (s.late > 0 ? 1 : 0),
       lateness: m.lateness + s.late,
+      aged: m.aged + s.aged,
       score:
         m.score +
         s.late * WEIGHTS.late +
         s.driverWait * WEIGHTS.wait +
-        s.foodIdle * WEIGHTS.idle,
+        s.foodIdle * WEIGHTS.idle +
+        s.aged * WEIGHTS.aged,
     }),
-    { wait: 0, idle: 0, late: 0, lateness: 0, score: 0 },
+    { wait: 0, idle: 0, late: 0, lateness: 0, aged: 0, score: 0 },
   );
 }
 
@@ -214,7 +244,7 @@ export function plan(jobs: Job[], sequence: string[], options: Options): Plan {
     : heuristic(queued, sequence, score, start);
   const bestSlots = schedule(jobs, found.sequence, options);
   const bestMetrics = metrics(bestSlots);
-  const waiting = (m: Metrics) => m.wait + m.lateness;
+  const waiting = (m: Metrics) => m.wait + m.lateness + m.aged;
   return {
     current: { sequence, slots: currentSlots, metrics: currentMetrics },
     best: { sequence: found.sequence, slots: bestSlots, metrics: bestMetrics },

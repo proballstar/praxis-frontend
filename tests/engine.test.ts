@@ -185,3 +185,63 @@ test("rejects malformed sequences and impossible station use", () => {
     ),
   );
 });
+
+test("packing delays pickup readiness but not the station", () => {
+  const jobs: Job[] = [
+    { id: "a", remaining: 5, pack: 3, arrival: 6, deadline: 8 },
+    { id: "b", remaining: 2, arrival: 5, deadline: 9 },
+  ];
+  const slots = schedule(jobs, ["a", "b"], { stations: 1 });
+  const a = slots.find((s) => s.id === "a")!;
+  assert.equal(a.end, 5);
+  assert.equal(a.ready, 8);
+  assert.equal(a.driverWait, 2);
+  assert.equal(a.late, 0);
+  // Station is free as soon as cooking ends, while packing is still running.
+  assert.equal(slots.find((s) => s.id === "b")!.start, 5);
+});
+
+test("food sitting and courier wait are opposite sides of the same gap", () => {
+  const [early] = schedule(
+    [{ id: "x", remaining: 4, arrival: 10, deadline: 12 }],
+    ["x"],
+    { stations: 1 },
+  );
+  // Held: cooking starts 2 minutes before the 6-minute-away courier.
+  assert.equal(early.held, true);
+  assert.equal(early.foodIdle, 2);
+  assert.equal(early.driverWait, 0);
+});
+
+test("aging only counts time past the limit, and is reported separately", () => {
+  const jobs: Job[] = [
+    { id: "old", remaining: 3, arrival: 5, deadline: 9, received: -30 },
+    { id: "new", remaining: 3, arrival: 5, deadline: 9, received: 0 },
+  ];
+  const slots = schedule(jobs, ["old", "new"], { stations: 1 });
+  assert.equal(slots[0].aged, 10);
+  assert.equal(slots[1].aged, 0);
+  const m = metrics(slots);
+  assert.equal(m.aged, 10);
+  assert.equal(m.score, metrics(slots.map((s) => ({ ...s, aged: 0 }))).score + 30);
+});
+
+test("a deliberately held order does not age", () => {
+  const jobs: Job[] = [
+    { id: "later", remaining: 6, arrival: 40, deadline: 42, received: -60 },
+  ];
+  const [slot] = schedule(jobs, ["later"], { stations: 1 });
+  assert.equal(slot.held, true);
+  assert.equal(slot.aged, 0);
+});
+
+test("the planner never picks a plan with more aging than the current one", () => {
+  const jobs: Job[] = [
+    { id: "old", remaining: 6, arrival: 8, deadline: 10, received: -60 },
+    { id: "fresh1", remaining: 6, arrival: 8, deadline: 10, received: 0 },
+    { id: "fresh2", remaining: 6, arrival: 8, deadline: 10, received: 0 },
+  ];
+  const p = plan(jobs, ["fresh1", "fresh2", "old"], { stations: 1 });
+  assert.ok(p.best.metrics.score <= p.current.metrics.score);
+  assert.ok(p.best.metrics.aged <= p.current.metrics.aged);
+});

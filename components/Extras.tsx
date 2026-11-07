@@ -223,6 +223,7 @@ export function AskPraxis({ dispatch }: { dispatch: Dispatch }) {
       approved &&
       !(await dispatch({
         type: "batch",
+        baseRev: turn.proposal!.baseRev,
         label: "approved changes",
         actions: turn.proposal!.actions,
       }))

@@ -43,6 +43,8 @@ export type Service = {
   name: string;
   stations: number;
   graceMinutes: number;
+  /** Packing minutes between cooking finishing and the order being ready for pickup. */
+  packMinutes: number;
   menu: MenuItem[];
   orders: Order[];
   /** Queued order ids, in the order the kitchen intends to cook them. */
@@ -56,7 +58,7 @@ export type Service = {
 
 export type KitchenSettings = Pick<
   Service,
-  "name" | "stations" | "graceMinutes" | "menu"
+  "name" | "stations" | "graceMinutes" | "packMinutes" | "menu"
 >;
 export type NewOrder = {
   ref?: string;
@@ -77,10 +79,10 @@ export type Action =
   | { type: "courierHere"; id: string }
   | { type: "cancel"; id: string }
   | { type: "move"; id: string; direction: -1 | 1 }
-  | { type: "applyPlan"; sequence: string[] }
+  | { type: "applyPlan"; sequence: string[]; baseRev: number }
   | { type: "dismissPlan"; sequence: string[] }
   | { type: "optimize" }
-  | { type: "batch"; label: string; actions: Action[] }
+  | { type: "batch"; label: string; baseRev: number; actions: Action[] }
   | { type: "undo" }
   | { type: "loadSample" }
   | { type: "clearSample" }
@@ -117,6 +119,7 @@ export const emptyService = (): Service => ({
   name: "",
   stations: 2,
   graceMinutes: 5,
+  packMinutes: 2,
   menu: starterMenu(),
   orders: [],
   queue: [],
@@ -177,6 +180,9 @@ function cleanSettings(settings: KitchenSettings): KitchenSettings {
   const graceMinutes = settings.graceMinutes;
   if (!Number.isInteger(graceMinutes) || graceMinutes < 0 || graceMinutes > 60)
     throw new ServiceError("Pickup grace must be from 0 to 60 minutes.");
+  const packMinutes = settings.packMinutes;
+  if (!Number.isInteger(packMinutes) || packMinutes < 0 || packMinutes > 30)
+    throw new ServiceError("Packing time must be from 0 to 30 minutes.");
   if (!Array.isArray(settings.menu))
     throw new ServiceError("The menu could not be read.");
   const menu = settings.menu
@@ -187,7 +193,18 @@ function cleanSettings(settings: KitchenSettings): KitchenSettings {
       name: m.name,
       minutes: minutes(m.minutes, 1, `Prep time for ${m.name}`),
     }));
-  return { name, stations, graceMinutes, menu };
+  return { name, stations, graceMinutes, packMinutes, menu };
+}
+
+/**
+ * An approval is only valid for the board it was shown on. Any change since then
+ * (another device, a double tap, a courier update) means the numbers are stale.
+ */
+function checkBase(previous: Service, baseRev: unknown) {
+  if (baseRev !== previous.rev)
+    throw new ServiceError(
+      "The board changed after this was proposed, so the numbers may be out of date. Ask again for a fresh proposal.",
+    );
 }
 
 function find(s: Service, id: string, ...statuses: Order["status"][]) {
@@ -385,6 +402,7 @@ export function reduce(
     }
     case "applyPlan": {
       const incoming = action.sequence;
+      checkBase(previous, action.baseRev);
       if (
         !Array.isArray(incoming) ||
         incoming.length !== s.queue.length ||
@@ -406,6 +424,7 @@ export function reduce(
       break;
     }
     case "batch": {
+      checkBase(previous, action.baseRev);
       if (!Array.isArray(action.actions) || !action.actions.length)
         throw new ServiceError("There is nothing to apply.");
       if (action.actions.some((a) => a?.type === "batch" || a?.type === "undo"))
@@ -488,12 +507,15 @@ const fromNow = (t: number, now: number) => Math.round((t - now) / MINUTE);
 
 /** Translates live orders into planner jobs, in whole minutes from now. */
 export function jobsFor(s: Service, now: number): Job[] {
+  const pack = s.packMinutes ?? 0;
   return s.orders.flatMap((o): Job[] => {
     if (o.status !== "queued" && o.status !== "cooking") return [];
     const base = {
       id: o.id,
       arrival: fromNow(o.arrival, now),
       deadline: fromNow(o.deadline, now),
+      received: fromNow(o.receivedAt, now),
+      pack,
     };
     if (o.status === "queued") return [{ ...base, remaining: totalPrep(o) }];
     const end = o.startedAt! + totalPrep(o) * MINUTE;

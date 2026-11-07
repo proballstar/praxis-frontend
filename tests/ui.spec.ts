@@ -242,11 +242,24 @@ test('tablet and phone layouts fit the viewport', async ({ page }) => {
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     }
     await view(page, 'Orders');
-    const choices = page.getByRole('button', { name: /^Select order/ });
-    const lastChoice = choices.last();
-    const choiceLabel = await lastChoice.getAttribute('aria-label');
-    await lastChoice.click();
-    await expect(page.getByRole('article', { name: choiceLabel!.replace('Select order', 'Order'), exact: true })).toBeVisible();
+    let snapshot = await state(page);
+    if (snapshot.orders.filter(o => o.status === 'DRAFT' || o.status === 'RELEASED').length < 2) {
+      expect((await page.request.post('/api/orders', {data:{channel:'walk_in',customer:'Second receipt',promisedMinutes:30,items:[{recipe:'fries',qty:1}]}})).ok()).toBe(true);
+      await page.reload();
+      snapshot = await state(page);
+    }
+    const activeOrders = snapshot.orders.filter((order) => order.status === 'DRAFT' || order.status === 'RELEASED');
+    const board = page.getByRole('region', { name: 'Order receipts', exact: true });
+    const tickets = board.getByRole('article');
+    await expect(tickets).toHaveCount(activeOrders.length);
+    await expect.poll(async () => page.evaluate(() => {
+      const boardElement = document.querySelector<HTMLElement>('.receipt-board');
+      return boardElement ? boardElement.scrollWidth > boardElement.clientWidth : false;
+    })).toBe(true);
+    await tickets.last().scrollIntoViewIfNeeded();
+    await expect(tickets.last()).toBeInViewport();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(width);
     await page.screenshot({ path: `/tmp/praxis-${name}.png`, fullPage: true });
   }
 });
@@ -263,6 +276,10 @@ test('API rejects invalid and cross-site mutations', async ({ page }) => {
     data: { channel: 'delivery', etaMinutes: 20, items: [{ recipe: 'burger', qty: 1 }] },
   });
   expect(crossSite.status()).toBe(403);
+  const metadataBlocked = await page.request.post('/api/orders', {headers:{'sec-fetch-site':'cross-site'}, data:{}});
+  expect(metadataBlocked.status()).toBe(403);
+  const incomplete = await page.request.post('/api/approve', {data:{baseRev:before.rev,changes:[{kind:'equipment',resource:'Grill'}]}});
+  expect(incomplete.status()).toBe(422);
   expect(recordedOrders(await state(page))).toEqual(recordedOrders(before));
   const assistant = await page.request.post('/api/assistant', { data: { messages: [] } });
   expect(assistant.status()).toBe(400);
@@ -285,4 +302,31 @@ test('Start records cooking when the secure-context UUID API is unavailable', as
   const saved = (await state(page)).orders.find(o => o.id === order.orderId)!;
   expect(saved.tasks.find(t => t.name === 'Grill burger')?.status).toBe('COOKING');
   expect(saved.tasks.find(t => t.name === 'Grill burger')?.actualStartMs).not.toBeNull();
+});
+
+test('voice question fills the editable input and requires Send', async ({ page }) => {
+  await page.addInitScript(`
+    class FakeRecognition {
+      start() { window.testRecognition = this; }
+      stop() { this.onend?.(); }
+      abort() {}
+    }
+    window.SpeechRecognition = FakeRecognition;
+  `);
+  let requests = 0;
+  await page.route('**/api/assistant', async route => {
+    requests++;
+    await route.fulfill({json:{answer:'Question received.',mode:'openrouter'}});
+  });
+  await page.goto('/');
+  await page.getByRole('button', {name:'Ask Praxis',exact:true}).click();
+  const dialog = page.getByRole('dialog',{name:'Ask Praxis',exact:true});
+  await dialog.getByLabel('Your question').fill('Can we');
+  await dialog.getByRole('button',{name:'Start voice input',exact:true}).click();
+  await page.evaluate(`window.testRecognition.onresult({results:[[{transcript:'handle this rush?'}]]}); window.testRecognition.onend();`);
+  await expect(dialog.getByLabel('Your question')).toHaveValue('Can we handle this rush?');
+  expect(requests).toBe(0);
+  await dialog.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(dialog.getByText('Question received.',{exact:true})).toBeVisible();
+  expect(requests).toBe(1);
 });

@@ -1,14 +1,27 @@
 "use client";
-import { useState } from "react";
-import { Plus, ArrowUpRight, ClipboardList, Truck, Clock3 } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  Plus,
+  ArrowUpRight,
+  ClipboardList,
+  ArrowLeft,
+  ArrowRight,
+} from "lucide-react";
 import { Button } from "@/components/ui";
 import { useKitchen } from "./kitchen";
 import { ReceiptCard } from "./Receipt";
 type Filter = "active" | "drafts" | "released";
 export function OrdersView({ onNew }: { onNew: () => void }) {
-  const { snap, call, toast, fmt } = useKitchen();
+  const { snap, call, toast } = useKitchen();
   const [filter, setFilter] = useState<Filter>("active");
-  const [selected, setSelected] = useState<string | null>(null);
+  const board = useRef<HTMLElement>(null);
+  const scrollReceipts = (direction: number) => {
+    const rail = board.current;
+    if (!rail) return;
+    const width = rail.firstElementChild?.getBoundingClientRect().width ?? 420;
+    const gap = Number.parseFloat(getComputedStyle(rail).columnGap) || 18;
+    rail.scrollBy({ left: direction * (width + gap), behavior: "smooth" });
+  };
   if (!snap) return null;
   const open = snap.orders.filter(
     (o) => o.status === "DRAFT" || o.status === "RELEASED",
@@ -23,7 +36,6 @@ export function OrdersView({ onNew }: { onNew: () => void }) {
     )
     .sort((a, b) => a.targetMs - b.targetMs || a.number - b.number);
   const drafts = open.filter((o) => o.status === "DRAFT").length;
-  const current = shown.find((o) => o.id === selected) ?? shown[0];
   const chips: [Filter, string, number][] = [
     ["active", "All orders", open.length],
     ["drafts", "Drafts", drafts],
@@ -94,76 +106,38 @@ export function OrdersView({ onNew }: { onNew: () => void }) {
           </button>
         )}
       </div>
-      <div className="order-master-detail">
-        <aside className="order-list" aria-label="Order list">
-          <div className="order-list-heading">
-            <span>ORDER QUEUE</span>
-            <span>{shown.length} orders</span>
-          </div>
-          {shown.map((o) => (
-            <button
-              key={o.id}
-              className={`order-list-card ${current?.id === o.id ? "is-selected" : ""}`}
-              onClick={() => setSelected(o.id)}
-              aria-label={`Select order ${o.number}`}
-              aria-pressed={current?.id === o.id}
-            >
-              <div className="order-list-card-top">
-                <b>#{o.number}</b>
-                <span
-                  className={
-                    o.status === "DRAFT" ? "queue-draft" : "queue-issued"
-                  }
-                >
-                  {o.status === "DRAFT" ? "Draft" : "Released"}
-                </span>
-              </div>
-              <strong>{o.customer || "Guest"}</strong>
-              <p>
-                {o.itemCount} items · {o.items.map((i) => i.name).join(", ")}
-              </p>
-              <div className="order-list-card-bottom">
-                <span>
-                  <Truck size={13} />
-                  {o.driver ? fmt(o.driver.arrivalMs) : fmt(o.promisedMs)}
-                </span>
-                <span
-                  className={
-                    o.plan.risk === "at_risk" ? "queue-risk" : "queue-ontime"
-                  }
-                >
-                  <i />
-                  {o.plan.risk === "at_risk"
-                    ? "At risk"
-                    : o.plan.risk === "no_plan"
-                      ? "Planning"
-                      : "On time"}
-                </span>
-              </div>
-            </button>
-          ))}
-          {!shown.length && (
-            <p className="list-empty">No {filter} orders right now.</p>
-          )}
-          <div className="queue-note">
-            <Clock3 size={14} />
-            <span>
-              Ordered by pickup target.
-              <br />
-              Issued plans stay fixed.
-            </span>
-          </div>
-        </aside>
-        <div className="receipt-detail">
-          {current ? (
-            <ReceiptCard key={current.id} order={current} />
-          ) : (
-            <div className="receipt-placeholder">
-              Select an order to view its receipt.
-            </div>
-          )}
+      <div className="receipt-board-toolbar">
+        <span>
+          {shown.length} {shown.length === 1 ? "receipt" : "receipts"} ·
+          earliest pickup first
+        </span>
+        <div>
+          <button
+            aria-label="Previous receipts"
+            onClick={() => scrollReceipts(-1)}
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <button aria-label="Next receipts" onClick={() => scrollReceipts(1)}>
+            <ArrowRight size={16} />
+          </button>
         </div>
       </div>
+      <section
+        ref={board}
+        className="receipt-board"
+        aria-label="Order receipts"
+        tabIndex={0}
+      >
+        {shown.map((o) => (
+          <div className="receipt-column" key={o.id}>
+            <ReceiptCard order={o} />
+          </div>
+        ))}
+        {!shown.length && (
+          <p className="receipt-board-empty">No {filter} orders right now.</p>
+        )}
+      </section>
     </div>
   );
 }

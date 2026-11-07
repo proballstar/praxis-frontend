@@ -266,267 +266,288 @@ export function ReceiptCard({
   return (
     <article
       aria-label={`Order ${order.number}`}
-      className={`tk-receipt min-w-0 space-y-4 rounded-xl border bg-panel p-5 sm:p-6 ${plan.risk === "at_risk" && open ? "border-line" : "border-line"}`}
+      className={`tk-receipt order-folio ${plan.risk === "at_risk" && open ? "folio-risk" : ""}`}
     >
-      <header className="receipt-ticket-header flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <span className="ticket-kicker">ORDER RECEIPT</span>
-          <p className="flex flex-wrap items-baseline gap-x-3">
-            <span className="text-2xl font-semibold tracking-tight">
-              #{order.number}
-            </span>
-            <span className="text-base font-semibold">{order.customer}</span>
-            {order.sample && (
-              <span className="text-xs font-bold uppercase text-muted">
-                Sample
+      <div className="order-paper">
+        <div className={`receipt-channel channel-${order.channel}`}>
+          {CHANNEL[order.channel]}
+        </div>
+        <header className="receipt-ticket-header flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <span className="ticket-kicker">ORDER RECEIPT</span>
+            <p className="flex flex-wrap items-baseline gap-x-3">
+              <span className="text-2xl font-semibold tracking-tight">
+                #{order.number}
               </span>
-            )}
-          </p>
-          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-            <Pill tone="quiet">{CHANNEL[order.channel]}</Pill>
-            <span className="text-muted">{order.source}</span>
-            <span className="rounded-md border border-line px-2 py-0.5 font-mono font-bold">
-              Pickup code {order.pickupCode}
-            </span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Pill tone={phase.tone}>
-            {phase.label}
-            {order.status === "RELEASED" ? ` · v${plan.version}` : ""}
-            {order.slot ? ` · ${order.slot}` : ""}
-          </Pill>
-          {open && <RiskBadge order={order} />}
-        </div>
-      </header>
-
-      <section
-        aria-label="Pickup timing"
-        className="pickup-timing rounded-lg border border-line bg-raised p-3 text-sm leading-relaxed"
-      >
-        {driver ? (
-          <>
-            <p>
-              <b>Driver{driver.name ? ` ${driver.name}` : ""}</b> arrives about{" "}
-              <b className="text-xl">{fmt(driver.arrivalMs)}</b>{" "}
-              <span className="text-muted">(estimate · {driver.source})</span>
-            </p>
-            <p className={driver.stale ? "font-bold text-warn" : "text-muted"}>
-              Updated {fmt(driver.updatedMs)} · {driver.ageMinutes} min ago
-              {driver.stale ? " · STALE: ask for a fresh estimate" : ""}
-              {" · "}could be {Math.round(driver.earlyS)} s early to{" "}
-              {Math.round(driver.lateS)} s late
-            </p>
-          </>
-        ) : (
-          <p>
-            <b>Promised pickup</b>{" "}
-            <b className="text-xl">{fmt(order.promisedMs)}</b>{" "}
-            <span className="text-muted">
-              ({CHANNEL[order.channel].toLowerCase()} order, a promise rather
-              than an estimate)
-            </span>
-          </p>
-        )}
-        <p>
-          Aim to have the checked bag ready at{" "}
-          <b className="text-xl">{fmt(order.targetMs)}</b>
-        </p>
-      </section>
-
-      <section
-        aria-label="Bag-ready estimate"
-        className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3"
-      >
-        <div>
-          <p className="text-sm text-muted">ESTIMATED BAG-READY</p>
-          <p className="text-2xl font-semibold tracking-tight tabular-nums">
-            {fmt(plan.bagReadyMs)}
-          </p>
-        </div>
-        <div className="text-right text-sm">
-          {plan.minutesAfterTarget !== null && (
-            <p className="font-bold text-bad">
-              {plan.minutesAfterTarget} min after target
-              {plan.minutesAfterEta
-                ? ` · ${plan.minutesAfterEta} min after ${order.driver ? "driver ETA" : "promise"}`
-                : ""}
-            </p>
-          )}
-          {plan.slippedMin > 0 && (
-            <p className="text-warn">
-              Printed plan said {fmt(plan.plannedBagReadyMs)}; now about{" "}
-              {plan.slippedMin} min later.
-            </p>
-          )}
-        </div>
-      </section>
-
-      {order.allergen.flag && (
-        <p
-          role="alert"
-          className="rounded-xl border-l-4 border-bad bg-bad-soft p-4 text-lg font-black text-bad"
-        >
-          ALLERGY: {order.allergen.note || "see items"}
-        </p>
-      )}
-
-      <section aria-label="Items">
-        <p className="text-xs font-black tracking-wider text-muted">
-          {order.itemCount} ITEM{order.itemCount === 1 ? "" : "S"}
-        </p>
-        <ul>
-          {order.items.map((i) => (
-            <li
-              key={i.id}
-              className="border-b border-line py-2.5 text-base last:border-0"
-            >
-              <b>
-                {i.qty} × {i.name}
-              </b>
-              {i.modifiers.length > 0 && (
-                <b className="ml-2 rounded bg-warn-soft px-2 text-warn">
-                  {i.modifiers.join(", ")}
-                </b>
+              <span className="text-base font-semibold">{order.customer}</span>
+              {order.sample && (
+                <span className="text-xs font-bold uppercase text-muted">
+                  Sample
+                </span>
               )}
-              {i.allergen && <b className="ml-2 text-bad">{i.allergen}</b>}
-            </li>
-          ))}
-        </ul>
-      </section>
+            </p>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <Pill tone="quiet">{CHANNEL[order.channel]}</Pill>
+              <span className="text-muted">{order.source}</span>
+              <span className="rounded-md border border-line px-2 py-0.5 font-mono font-bold">
+                Pickup code {order.pickupCode}
+              </span>
+            </p>
+          </div>
+        </header>
 
-      <section>
-        <p className="mb-1 text-xs font-black tracking-wider text-muted">
-          {order.status === "DRAFT"
-            ? "DRAFT PLAN (may change)"
-            : "ISSUED PREPARATION PLAN · FIXED"}
-        </p>
-        {order.tasks.some((t) => t.plannedStartMs === null) ? (
-          <p className="text-sm text-warn">
-            No plan yet. Planning is running, or the scheduler needs attention.
+        <section
+          aria-label="Pickup timing"
+          className="pickup-timing rounded-lg border border-line bg-raised p-3 text-sm leading-relaxed"
+        >
+          {driver ? (
+            <>
+              <p>
+                <b>Driver{driver.name ? ` ${driver.name}` : ""}</b> arrives
+                about <b className="text-xl">{fmt(driver.arrivalMs)}</b>{" "}
+                <span className="text-muted">(estimate · {driver.source})</span>
+              </p>
+              <p
+                className={driver.stale ? "font-bold text-warn" : "text-muted"}
+              >
+                Updated {fmt(driver.updatedMs)} · {driver.ageMinutes} min ago
+                {driver.stale ? " · STALE: ask for a fresh estimate" : ""}
+                {" · "}could be {Math.round(driver.earlyS)} s early to{" "}
+                {Math.round(driver.lateS)} s late
+              </p>
+            </>
+          ) : (
+            <p>
+              <b>Promised pickup</b>{" "}
+              <b className="text-xl">{fmt(order.promisedMs)}</b>{" "}
+              <span className="text-muted">
+                ({CHANNEL[order.channel].toLowerCase()} order, a promise rather
+                than an estimate)
+              </span>
+            </p>
+          )}
+          <p>
+            Aim to have the checked bag ready at{" "}
+            <b className="text-xl">{fmt(order.targetMs)}</b>
           </p>
-        ) : (
-          <PlanTable order={order} />
+        </section>
+
+        {order.allergen.flag && (
+          <p
+            role="alert"
+            className="rounded-xl border-l-4 border-bad bg-bad-soft p-4 text-lg font-black text-bad"
+          >
+            ALLERGY: {order.allergen.note || "see items"}
+          </p>
         )}
-      </section>
 
-      {plan.lockedAtRisk && (
-        <p
-          role="status"
-          className="flex items-start gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"
-        >
-          <Siren size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
-          This receipt is issued, so it won&apos;t change by itself. A manager
-          can withdraw the unstarted items and issue a replacement.
-        </p>
-      )}
-      {plan.missedStarts.length > 0 && (
-        <p
-          role="status"
-          className="rounded-xl bg-bad-soft p-3 text-sm font-bold text-bad"
-        >
-          Should have started already: {plan.missedStarts.join(", ")}.
-        </p>
-      )}
-      {plan.withdrawnNote && order.status === "DRAFT" && (
-        <p className="rounded-xl bg-warn-soft p-3 text-sm text-warn">
-          {plan.withdrawnNote}
-        </p>
-      )}
-
-      <EtaControls order={order} />
-      <Explain order={order} />
-      {children}
-
-      {open && (
-        <footer className="flex flex-wrap gap-3 border-t border-line pt-5">
-          {order.status === "DRAFT" && (
-            <Button
-              tone="primary"
-              className="min-h-11 flex-1 text-sm"
-              disabled={busy || plan.risk === "no_plan"}
-              onClick={() =>
-                act(
-                  "issue",
-                  {},
-                  `Order #${order.number} released to the kitchen.`,
-                )
-              }
-            >
-              Release to kitchen
-            </Button>
-          )}
-          <a
-            href={`/print/${order.id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-line bg-panel px-3.5 text-sm font-semibold hover:bg-raised"
-          >
-            <Printer size={16} aria-hidden="true" /> Print
-            {order.printed.count ? ` (printed ${order.printed.count}×)` : ""}
-          </a>
-          {order.status === "RELEASED" && order.phase === "cooking" && (
-            <Button disabled={busy} onClick={() => setWithdrawing(true)}>
-              <Undo2 size={16} aria-hidden="true" /> Withdraw
-            </Button>
-          )}
-          <Button
-            tone="danger"
-            disabled={busy}
-            onClick={() =>
-              act("cancel", { force: false }).then((ok) => ok || undefined)
-            }
-          >
-            Cancel order
-          </Button>
-        </footer>
-      )}
-
-      {withdrawing && (
-        <div
-          role="group"
-          aria-label="Withdraw receipt"
-          className="space-y-2 rounded-xl border border-warn bg-warn-soft p-3"
-        >
-          <p className="text-sm font-semibold text-warn">
-            This takes back the items that haven&apos;t started. Tell staff,
-            then release the replacement. Work already cooking or done stays as
-            recorded.
+        <section aria-label="Items">
+          <p className="text-xs font-black tracking-wider text-muted">
+            {order.itemCount} ITEM{order.itemCount === 1 ? "" : "S"}
           </p>
-          <input
-            className="min-h-14 w-full rounded-xl border border-line bg-panel px-3"
-            aria-label="Why is this receipt being withdrawn?"
-            placeholder="Why? (shown on the replacement)"
-            value={reason}
-            maxLength={200}
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <div className="flex gap-2">
-            <Button className="flex-1" onClick={() => setWithdrawing(false)}>
-              Keep the receipt
-            </Button>
-            <Button
-              tone="danger"
-              className="flex-1"
-              disabled={!reason.trim() || busy}
-              onClick={async () => {
-                if (
-                  await act(
-                    "withdraw",
-                    { reason },
-                    `Receipt #${order.number} withdrawn. Release the replacement when ready.`,
-                  )
-                ) {
-                  setWithdrawing(false);
-                  setReason("");
-                }
-              }}
-            >
-              Withdraw
-            </Button>
+          <ul>
+            {order.items.map((i) => (
+              <li
+                key={i.id}
+                className="border-b border-line py-2.5 text-base last:border-0"
+              >
+                <b>
+                  {i.qty} × {i.name}
+                </b>
+                {i.modifiers.length > 0 && (
+                  <b className="ml-2 rounded bg-warn-soft px-2 text-warn">
+                    {i.modifiers.join(", ")}
+                  </b>
+                )}
+                {i.allergen && <b className="ml-2 text-bad">{i.allergen}</b>}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <div className="paper-pickup-code">
+          <span>MATCH PICKUP CODE</span>
+          <b>{order.pickupCode}</b>
+        </div>
+      </div>
+      <div className="plan-paper">
+        <div className="plan-paper-header">
+          <span>KITCHEN PLAN</span>{" "}
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill tone={phase.tone}>
+              {phase.label}
+              {order.status === "RELEASED" ? ` · v${plan.version}` : ""}
+              {order.slot ? ` · ${order.slot}` : ""}
+            </Pill>
+            {open && <RiskBadge order={order} />}
           </div>
         </div>
-      )}
+        <h3 className="plan-order-number">
+          #{order.number}
+          <small>{order.customer}</small>
+        </h3>
+        <section
+          aria-label="Bag-ready estimate"
+          className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3"
+        >
+          <div>
+            <p className="text-sm text-muted">ESTIMATED BAG-READY</p>
+            <p className="text-2xl font-semibold tracking-tight tabular-nums">
+              {fmt(plan.bagReadyMs)}
+            </p>
+          </div>
+          <div className="text-right text-sm">
+            {plan.minutesAfterTarget !== null && (
+              <p className="font-bold text-bad">
+                {plan.minutesAfterTarget} min after target
+                {plan.minutesAfterEta
+                  ? ` · ${plan.minutesAfterEta} min after ${order.driver ? "driver ETA" : "promise"}`
+                  : ""}
+              </p>
+            )}
+            {plan.slippedMin > 0 && (
+              <p className="text-warn">
+                Printed plan said {fmt(plan.plannedBagReadyMs)}; now about{" "}
+                {plan.slippedMin} min later.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section>
+          <p className="mb-1 text-xs font-black tracking-wider text-muted">
+            {order.status === "DRAFT"
+              ? "DRAFT PLAN (may change)"
+              : "ISSUED PREPARATION PLAN · FIXED"}
+          </p>
+          {order.tasks.some((t) => t.plannedStartMs === null) ? (
+            <p className="text-sm text-warn">
+              No plan yet. Planning is running, or the scheduler needs
+              attention.
+            </p>
+          ) : (
+            <PlanTable order={order} />
+          )}
+        </section>
+
+        {plan.lockedAtRisk && (
+          <p
+            role="status"
+            className="flex items-start gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"
+          >
+            <Siren size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+            This receipt is issued, so it won&apos;t change by itself. A manager
+            can withdraw the unstarted items and issue a replacement.
+          </p>
+        )}
+        {plan.missedStarts.length > 0 && (
+          <p
+            role="status"
+            className="rounded-xl bg-bad-soft p-3 text-sm font-bold text-bad"
+          >
+            Should have started already: {plan.missedStarts.join(", ")}.
+          </p>
+        )}
+        {plan.withdrawnNote && order.status === "DRAFT" && (
+          <p className="rounded-xl bg-warn-soft p-3 text-sm text-warn">
+            {plan.withdrawnNote}
+          </p>
+        )}
+
+        <EtaControls order={order} />
+        <Explain order={order} />
+        {children}
+
+        {open && (
+          <footer className="flex flex-wrap gap-3 border-t border-line pt-5">
+            {order.status === "DRAFT" && (
+              <Button
+                tone="primary"
+                className="min-h-11 flex-1 text-sm"
+                disabled={busy || plan.risk === "no_plan"}
+                onClick={() =>
+                  act(
+                    "issue",
+                    {},
+                    `Order #${order.number} released to the kitchen.`,
+                  )
+                }
+              >
+                Release to kitchen
+              </Button>
+            )}
+            <a
+              href={`/print/${order.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-line bg-panel px-3.5 text-sm font-semibold hover:bg-raised"
+            >
+              <Printer size={16} aria-hidden="true" /> Print
+              {order.printed.count ? ` (printed ${order.printed.count}×)` : ""}
+            </a>
+            {order.status === "RELEASED" && order.phase === "cooking" && (
+              <Button disabled={busy} onClick={() => setWithdrawing(true)}>
+                <Undo2 size={16} aria-hidden="true" /> Withdraw
+              </Button>
+            )}
+            <Button
+              tone="danger"
+              disabled={busy}
+              onClick={() =>
+                act("cancel", { force: false }).then((ok) => ok || undefined)
+              }
+            >
+              Cancel order
+            </Button>
+          </footer>
+        )}
+
+        {withdrawing && (
+          <div
+            role="group"
+            aria-label="Withdraw receipt"
+            className="space-y-2 rounded-xl border border-warn bg-warn-soft p-3"
+          >
+            <p className="text-sm font-semibold text-warn">
+              This takes back the items that haven&apos;t started. Tell staff,
+              then release the replacement. Work already cooking or done stays
+              as recorded.
+            </p>
+            <input
+              className="min-h-14 w-full rounded-xl border border-line bg-panel px-3"
+              aria-label="Why is this receipt being withdrawn?"
+              placeholder="Why? (shown on the replacement)"
+              value={reason}
+              maxLength={200}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => setWithdrawing(false)}>
+                Keep the receipt
+              </Button>
+              <Button
+                tone="danger"
+                className="flex-1"
+                disabled={!reason.trim() || busy}
+                onClick={async () => {
+                  if (
+                    await act(
+                      "withdraw",
+                      { reason },
+                      `Receipt #${order.number} withdrawn. Release the replacement when ready.`,
+                    )
+                  ) {
+                    setWithdrawing(false);
+                    setReason("");
+                  }
+                }}
+              >
+                Withdraw
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </article>
   );
 }

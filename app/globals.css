@@ -1725,3 +1725,450 @@ button:disabled {
     break-inside: avoid;
   }
 }
+
+/* Receipt rail: every order is a complete ticket, visible side by side. */
+.receipt-board-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.receipt-board-toolbar > div {
+  display: flex;
+  gap: 5px;
+}
+.receipt-board-toolbar button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 6px;
+  color: var(--ink);
+}
+.receipt-board-toolbar button:hover {
+  background: var(--raised);
+}
+.receipt-board {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  gap: 18px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: 3px 2px 18px;
+  scroll-snap-type: x proximity;
+  scroll-padding-left: 2px;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.receipt-column {
+  flex: 0 0 420px;
+  max-width: 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+.receipt-column .tk-receipt {
+  max-height: calc(100dvh - 275px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.receipt-column .tk-receipt > header {
+  gap: 12px;
+}
+.receipt-column .tk-receipt > header > div:last-child {
+  width: 100%;
+}
+.receipt-column .tk-receipt .ticket-plan-row,
+.receipt-column .tk-receipt .ticket-plan-columns {
+  grid-template-columns: 66px minmax(0, 1fr) 66px;
+  gap: 8px;
+}
+.receipt-column .tk-receipt .ticket-plan-row > b {
+  font-size: 10px;
+}
+.receipt-column .tk-receipt .ticket-plan-row strong {
+  font-size: 11px;
+}
+.receipt-column .tk-receipt .ticket-plan-row small {
+  font-size: 9px;
+}
+.receipt-column .tk-receipt .ticket-plan-columns {
+  font-size: 8px;
+}
+.receipt-column .tk-receipt::after {
+  display: none;
+}
+.receipt-column
+  .tk-receipt
+  section[aria-label="Bag-ready estimate"]
+  .text-right {
+  max-width: 190px;
+}
+.receipt-board-empty {
+  padding: 45px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 650px) {
+  .receipt-board {
+    gap: 13px;
+  }
+  .receipt-column {
+    flex-basis: calc(100vw - 38px);
+  }
+  .receipt-column .tk-receipt {
+    max-height: calc(100dvh - 330px);
+    min-height: 280px;
+  }
+  .receipt-board-toolbar {
+    font-size: 9px;
+    margin-top: 3px;
+  }
+}
+@media print {
+  .receipt-board {
+    display: block;
+    overflow: visible;
+  }
+  .receipt-column {
+    max-width: none;
+    break-after: page;
+  }
+  .receipt-column .tk-receipt {
+    max-height: none;
+    overflow: visible;
+  }
+  .receipt-board-toolbar {
+    display: none;
+  }
+}
+
+/* Each order has two papers: the guest receipt and the kitchen's instructions. */
+.receipt-column {
+  flex-basis: 650px;
+}
+.receipt-column .tk-receipt.order-folio {
+  display: grid;
+  grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
+  gap: 8px;
+  max-height: none;
+  overflow: visible;
+  background: var(--raised);
+  padding: 8px !important;
+  border: 1px solid var(--line) !important;
+  border-top: 3px solid #5181ab !important;
+  border-radius: 7px !important;
+  box-shadow: none;
+  align-items: start;
+}
+.receipt-column .tk-receipt.order-folio.folio-risk {
+  border-top-color: var(--brand) !important;
+}
+.order-paper,
+.plan-paper {
+  min-width: 0;
+  background: var(--panel);
+  padding: 14px 12px;
+  box-shadow: 0 2px 3px #00000004;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.order-paper .receipt-channel {
+  text-align: center;
+  text-transform: uppercase;
+  font:
+    700 10px/1.6 ui-monospace,
+    monospace;
+  padding: 5px;
+  margin-bottom: 13px;
+  background: #e9f2fb;
+  color: #2e5c87;
+  border-radius: 2px;
+}
+.order-paper .channel-delivery {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.order-paper .receipt-ticket-header {
+  display: block;
+  text-align: center;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--line);
+}
+.order-paper .ticket-kicker {
+  font-size: 8px;
+  margin-bottom: 8px;
+}
+.order-paper .receipt-ticket-header p:first-of-type {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.order-paper .receipt-ticket-header p:first-of-type > span:first-child {
+  font:
+    750 22px/1.4 ui-monospace,
+    monospace;
+}
+.order-paper .receipt-ticket-header p:first-of-type > span:nth-child(2) {
+  font-size: 12px;
+  font-weight: 600;
+}
+.order-paper .receipt-ticket-header p:nth-of-type(2) {
+  justify-content: center;
+  font-size: 9px;
+  gap: 4px;
+}
+.order-paper .receipt-ticket-header p:nth-of-type(2) > span:first-child {
+  display: none;
+}
+.order-paper .receipt-ticket-header p:nth-of-type(2) > span:last-child {
+  display: none;
+}
+.order-paper .pickup-timing {
+  font:
+    9px/1.8 ui-monospace,
+    monospace;
+  margin-top: 12px;
+}
+.order-paper .pickup-timing p:first-child,
+.order-paper .pickup-timing p:nth-child(2) {
+  font-size: 9px;
+}
+.order-paper .pickup-timing b {
+  font-size: 10px !important;
+}
+.order-paper section[aria-label="Items"] {
+  margin-top: 13px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.order-paper section[aria-label="Items"] > p {
+  font:
+    700 9px ui-monospace,
+    monospace;
+}
+.order-paper section[aria-label="Items"] li {
+  font-size: 11px !important;
+  padding: 8px 0 !important;
+  border: 0;
+  line-height: 1.7;
+}
+.order-paper section[aria-label="Items"] li > b:first-child {
+  font-weight: 700;
+}
+.order-paper section[aria-label="Items"] li > b:not(:first-child) {
+  display: block;
+  margin: 3px 0 0 14px;
+  padding: 0;
+  background: transparent;
+  font-size: 10px !important;
+}
+.paper-pickup-code {
+  margin-top: 17px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+  text-align: center;
+}
+.paper-pickup-code span {
+  font-size: 8px;
+  color: var(--muted);
+  display: block;
+}
+.paper-pickup-code > b {
+  font-size: 17px;
+  display: block;
+  margin-top: 7px;
+  letter-spacing: 0.03em;
+}
+.order-paper > p[role="alert"] {
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 9px;
+  margin-top: 12px;
+  border-radius: 2px;
+}
+.plan-paper-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  align-items: flex-start;
+  border-bottom: 1px dashed var(--line);
+  padding-bottom: 11px;
+}
+.plan-paper-header > span {
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  line-height: 1.8;
+}
+.plan-paper-header > div {
+  gap: 4px !important;
+  justify-content: flex-end;
+}
+.plan-paper-header > div > span {
+  font-size: 8px !important;
+  padding: 3px 5px;
+  gap: 3px;
+}
+.plan-paper-header > div > span > svg {
+  width: 11px;
+  height: 11px;
+}
+.plan-order-number {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 17px 0 8px;
+}
+.plan-order-number small {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+  margin-top: 3px;
+}
+.plan-paper section[aria-label="Bag-ready estimate"] {
+  margin: 12px 0 15px;
+  padding: 12px 0;
+  gap: 7px;
+}
+.plan-paper section[aria-label="Bag-ready estimate"] .text-sm {
+  font-size: 8px !important;
+}
+.plan-paper section[aria-label="Bag-ready estimate"] .text-2xl {
+  font-size: 22px;
+}
+.plan-paper section[aria-label="Bag-ready estimate"] .text-right {
+  max-width: none;
+  width: 100%;
+  text-align: left;
+  line-height: 1.7;
+  font-size: 9px;
+}
+.plan-paper .ticket-plan-row,
+.plan-paper .ticket-plan-columns {
+  grid-template-columns: 56px minmax(0, 1fr) 56px !important;
+  gap: 5px !important;
+}
+.plan-paper .ticket-plan-row > b {
+  font-size: 9px !important;
+}
+.plan-paper .ticket-plan-row strong {
+  font-size: 10px !important;
+}
+.plan-paper .ticket-plan-row small {
+  font-size: 9px !important;
+}
+.plan-paper .ticket-plan-columns {
+  font-size: 7px !important;
+}
+.plan-paper .ticket-station-name {
+  font-size: 10px;
+}
+.plan-paper > section > p {
+  font-size: 9px;
+}
+.plan-paper > p[role="status"] {
+  font:
+    9px/1.8 ui-monospace,
+    monospace;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 3px;
+}
+.plan-paper > div[role="group"] {
+  margin-top: 13px;
+  gap: 5px;
+}
+.plan-paper > div[role="group"] > span {
+  font-size: 9px;
+}
+.plan-paper > div[role="group"] .ui-button {
+  min-height: 30px;
+  font-size: 9px;
+  padding: 5px 7px;
+}
+.plan-paper > footer {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.plan-paper > footer .ui-button,
+.plan-paper > footer > a {
+  font:
+    600 10px/1.4 ui-sans-serif,
+    system-ui;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: 4px;
+}
+.plan-paper > button[aria-expanded] {
+  font-size: 10px !important;
+  margin-top: 8px;
+}
+@media (max-width: 650px) {
+  .receipt-column {
+    flex-basis: calc(100vw - 38px);
+  }
+  .receipt-column .tk-receipt.order-folio {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 8px !important;
+  }
+  .order-paper {
+    padding: 16px;
+  }
+  .plan-paper {
+    padding: 16px;
+  }
+  .order-paper .pickup-timing {
+    font-size: 11px;
+  }
+  .order-paper .pickup-timing p:first-child,
+  .order-paper .pickup-timing p:nth-child(2) {
+    font-size: 10px;
+  }
+  .order-paper section[aria-label="Items"] li {
+    font-size: 13px !important;
+  }
+  .plan-paper .ticket-plan-row strong {
+    font-size: 12px !important;
+  }
+  .plan-paper .ticket-plan-row > b {
+    font-size: 10px !important;
+  }
+  .plan-paper .ticket-plan-row small {
+    font-size: 10px !important;
+  }
+  .plan-paper .ticket-plan-columns {
+    font-size: 8px !important;
+  }
+  .plan-paper .ticket-plan-row,
+  .plan-paper .ticket-plan-columns {
+    grid-template-columns: 65px minmax(0, 1fr) 65px !important;
+  }
+}
+@media print {
+  .receipt-column .tk-receipt.order-folio {
+    grid-template-columns: 1fr 1fr;
+    break-inside: avoid;
+    background: white;
+    border: 0 !important;
+  }
+  .order-paper,
+  .plan-paper {
+    box-shadow: none;
+    color: black;
+    background: white;
+  }
+}

@@ -142,3 +142,11 @@ Unit/scenario tests exercise kitchen rules and solver behavior; install the solv
 - Old JSON data in `data/service.json` is **not migrated**.
 - Remaking a sealed bag requires an explicit manager exception to reopen it; it is not the normal packing path.
 - A shadow pilot with measured kitchen timings, real staff procedures and observed outcomes is needed before real use.
+
+### Receipt board and voice questions
+
+Open orders appear as a horizontal row of paired papers: the guest receipt and its station preparation plan. Scroll sideways or use the arrows; on narrow phones the two papers stack within each order.
+
+Ask Praxis supports browser speech recognition on supported browsers over HTTPS or localhost. The browser provides transcription; the returned text stays editable and is never sent automatically. On an HTTP LAN address, use keyboard dictation or typing. Real microphone/provider behavior varies by browser; automated tests simulate the recognition events.
+
+AI tools can read, explain, simulate and propose. Approval validates complete change inputs and the current board revision before applying changes transactionally. Neither chat text nor voice transcripts can approve a proposal. The optional shared passcode protects the board when configured; use a trusted local network for this prototype.

@@ -12,7 +12,8 @@ export async function middleware(request: NextRequest) {
   if (
     api &&
     request.method !== "GET" &&
-    isCrossSite(request.headers.get("origin"), request.headers.get("host"))
+    (request.headers.get("sec-fetch-site") === "cross-site" ||
+      isCrossSite(request.headers.get("origin"), request.headers.get("host")))
   )
     return NextResponse.json({ error: "Not allowed." }, { status: 403 });
 

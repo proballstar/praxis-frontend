@@ -122,6 +122,7 @@ export default function Home() {
   const showError = useCallback((message: string) => setNotice(message), []);
   const { service, offset, online, failure, dispatch } = useService(showError);
   const [sheet, setSheet] = useState<SheetName>(null);
+  const [reviewedRev, setReviewedRev] = useState(-1);
   const [tick, setTick] = useState(() => Date.now());
   const closeSheet = useCallback(() => setSheet(null), []);
 
@@ -238,7 +239,10 @@ export default function Home() {
         plan={plan}
         now={now}
         dispatch={dispatch}
-        onReview={() => setSheet("review")}
+        onReview={() => {
+          setReviewedRev(service.rev);
+          setSheet("review");
+        }}
         onNewOrder={() => setSheet("order")}
       />
 
@@ -253,6 +257,8 @@ export default function Home() {
             service={service}
             plan={plan}
             now={planningMoment}
+            changed={reviewedRev !== service.rev}
+            onAcknowledge={() => setReviewedRev(service.rev)}
             onApply={async () => {
               await dispatch({
                 type: "applyPlan",

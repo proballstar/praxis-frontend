@@ -188,7 +188,7 @@ test("real clock: the delay scenario produces the recommendation", () => {
     p.best.sequence.map((x) => s.orders.find((o) => o.id === x)!.ref),
     ["1044", "1043"],
   );
-  assert.equal(recommendation(s, p), true);
+  assert.equal(recommendation(s, p, at(4)), true);
 
   const dismissed = run(
     s,
@@ -196,7 +196,7 @@ test("real clock: the delay scenario produces the recommendation", () => {
     4,
   );
   assert.equal(dismissed.dismissedPlan, planKey(p.best.sequence));
-  assert.equal(recommendation(dismissed, p), false);
+  assert.equal(recommendation(dismissed, p, at(5)), false);
 
   const applied = run(s, [{ type: "applyPlan", sequence: p.best.sequence, baseRev: s.rev }], 4);
   assert.deepEqual(applied.queue, p.best.sequence);
@@ -419,4 +419,30 @@ test("a double-tapped approval applies once", () => {
     () => run(first, [{ type: "batch", label: "x", baseRev: s.rev, actions }]),
     /out of date/,
   );
+});
+
+test("a declined recommendation stays quiet, then may return", () => {
+  let s = withOrders(kitchen(), ["1042", 10, 10], ["1043", 12, 26], ["1044", 4, 18]);
+  s = run(s, [{ type: "start", id: id(s, "1042") }]);
+  s = run(s, [{ type: "addTime", id: id(s, "1042"), minutes: 8 }], 4);
+  const p = planFor(s, at(4));
+  assert.equal(recommendation(s, p, at(4)), true);
+  const declined = run(s, [{ type: "dismissPlan", sequence: p.best.sequence }], 4);
+  assert.equal(recommendation(declined, p, at(5)), false);
+  assert.equal(recommendation(declined, p, at(13)), false);
+  assert.equal(recommendation(declined, p, at(15)), true);
+});
+
+test("a just-approved first order is protected from a new recommendation", () => {
+  let s = withOrders(kitchen(), ["1", 5, 30], ["2", 5, 30]);
+  s = run(s, [{ type: "applyPlan", sequence: [...s.queue].reverse(), baseRev: s.rev }], 0);
+  assert.ok(s.protectedUntil && s.protectedUntil > at(0));
+  const flipped = { ...planFor(s, at(1)), shouldChange: true };
+  const reverse = [...s.queue].reverse();
+  const contested = {
+    ...flipped,
+    best: { ...flipped.best, sequence: reverse },
+  };
+  assert.equal(recommendation(s, contested, at(1)), false);
+  assert.equal(recommendation(s, contested, at(4)), true);
 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ModelMessage } from "ai";
 import { openRouterModel, runAgent } from "@/lib/agent";
 import { brief } from "@/lib/service";
+import { acquire } from "@/lib/limit";
 import { load } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,13 @@ export async function POST(request: Request) {
   }
   if (!messages)
     return NextResponse.json({ error: "Invalid question." }, { status: 400 });
+
+  const release = acquire();
+  if (!release)
+    return NextResponse.json(
+      { error: "Too many questions at once. Wait a moment and try again." },
+      { status: 429 },
+    );
 
   try {
     const service = await load();
@@ -64,5 +72,7 @@ export async function POST(request: Request) {
       { error: "Praxis could not read this kitchen's data." },
       { status: 500 },
     );
+  } finally {
+    release();
   }
 }

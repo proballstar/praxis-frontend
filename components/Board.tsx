@@ -437,7 +437,7 @@ export function Board({
         </div>
       )}
 
-      {recommendation(service, plan) && (
+      {recommendation(service, plan, now) && (
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-brand bg-soft p-3.5">
           <Sparkles size={20} className="shrink-0 text-brand" />
           <div className="min-w-48 flex-1">
@@ -547,11 +547,16 @@ export function ReviewPlan({
   service,
   plan,
   now,
+  changed,
+  onAcknowledge,
   onApply,
 }: {
   service: Service;
   plan: Plan;
   now: number;
+  /** The board changed after this sheet was opened. */
+  changed: boolean;
+  onAcknowledge: () => void;
   onApply: () => void;
 }) {
   const orders = new Map(service.orders.map((o) => [o.id, o]));
@@ -623,9 +628,21 @@ export function ReviewPlan({
           ? ", which is every option."
           : "; with a queue this long, it’s the best found, not every option."}
       </p>
-      <Button tone="primary" className="w-full" onClick={onApply}>
-        Apply new order
-      </Button>
+      {changed ? (
+        <div className="space-y-2 rounded-lg bg-warn-soft p-3">
+          <p className="text-sm text-warn">
+            The board changed while you were reviewing. The numbers above are
+            updated. Check them before applying.
+          </p>
+          <Button className="w-full" onClick={onAcknowledge}>
+            I’ve checked the new numbers
+          </Button>
+        </div>
+      ) : (
+        <Button tone="primary" className="w-full" onClick={onApply}>
+          Apply new order
+        </Button>
+      )}
     </div>
   );
 }

@@ -51,6 +51,10 @@ export type Service = {
   queue: string[];
   /** Recommendation the kitchen chose to ignore. */
   dismissedPlan: string | null;
+  /** When the recommendation was declined. A declined plan stays quiet for a while. */
+  dismissedAt: number | null;
+  /** The newly approved first order is not second-guessed until this time. */
+  protectedUntil: number | null;
   undo: Snapshot[];
   shiftStartedAt: number | null;
   shifts: PastShift[];
@@ -94,6 +98,10 @@ export class ServiceError extends Error {}
 export const MAX_STATIONS = 12;
 const MAX_MINUTES = 240;
 const UNDO_DEPTH = 10;
+/** A declined recommendation stays quiet this long. */
+export const COOLDOWN_MS = 10 * 60_000;
+/** An approved plan's first order is protected this long. */
+export const PROTECT_MS = 3 * 60_000;
 const MINUTE = 60_000;
 
 export const starterMenu = (): MenuItem[] =>
@@ -124,6 +132,8 @@ export const emptyService = (): Service => ({
   orders: [],
   queue: [],
   dismissedPlan: null,
+  dismissedAt: null,
+  protectedUntil: null,
   undo: [],
   shiftStartedAt: null,
   shifts: [],
@@ -415,12 +425,14 @@ export function reduce(
       remember(s, "apply the recommended order");
       s.queue = [...incoming];
       s.dismissedPlan = null;
+      s.protectedUntil = now + PROTECT_MS;
       break;
     }
     case "optimize": {
       remember(s, "apply the recommended order");
       s.queue = planFor(s, now).best.sequence;
       s.dismissedPlan = null;
+      s.protectedUntil = now + PROTECT_MS;
       break;
     }
     case "batch": {
@@ -452,6 +464,7 @@ export function reduce(
       if (!Array.isArray(action.sequence))
         throw new ServiceError("That recommendation could not be read.");
       s.dismissedPlan = planKey(action.sequence);
+      s.dismissedAt = now;
       break;
     case "undo": {
       const last = s.undo.shift();
@@ -490,6 +503,8 @@ export function reduce(
       s.queue = [];
       s.undo = [];
       s.dismissedPlan = null;
+      s.dismissedAt = null;
+      s.protectedUntil = null;
       s.shiftStartedAt = now;
       break;
     }
@@ -534,8 +549,16 @@ export const planFor = (s: Service, now: number): Plan =>
   plan(jobsFor(s, now), s.queue, { stations: s.stations });
 
 /** Recommendation worth showing, unless this exact one was already declined. */
-export function recommendation(s: Service, p: Plan) {
-  return p.shouldChange && planKey(p.best.sequence) !== s.dismissedPlan;
+export function recommendation(s: Service, p: Plan, now: number) {
+  if (!p.shouldChange) return false;
+  const declined =
+    planKey(p.best.sequence) === s.dismissedPlan &&
+    s.dismissedAt !== null &&
+    now - s.dismissedAt < COOLDOWN_MS;
+  if (declined) return false;
+  // Just approved: do not reshuffle the task the kitchen is about to start.
+  const protectedNow = s.protectedUntil !== null && now < s.protectedUntil;
+  return !(protectedNow && p.best.sequence[0] !== s.queue[0]);
 }
 
 export const overdueMinutes = (o: Order, now: number) =>

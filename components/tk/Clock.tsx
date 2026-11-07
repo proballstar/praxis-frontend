@@ -11,10 +11,18 @@ export function Clock() {
   const parts = clockParts(now, tz, snap?.clock24 ?? false);
   const spoken = `Restaurant time ${parts.hhmm} ${parts.suffix}`.trim();
   return (
-    <div className="flex max-w-full flex-wrap items-baseline gap-2 leading-none" role="timer" aria-label={spoken}>
-      <span className="text-6xl font-black tracking-[-0.06em] sm:text-7xl">{parts.hhmm}</span>
-      {parts.suffix && <span className="text-2xl font-bold text-muted sm:text-3xl">{parts.suffix}</span>}
-      <span className="ml-1 hidden text-xs font-semibold text-muted xl:inline" aria-hidden="true">
+    <div
+      className="flex max-w-full flex-wrap items-baseline gap-2 leading-none"
+      role="timer"
+      aria-label={spoken}
+    >
+      <span className="text-[25px] font-semibold tracking-[-0.04em]">
+        {parts.hhmm}
+      </span>
+      {parts.suffix && (
+        <span className="text-xs font-medium text-muted">{parts.suffix}</span>
+      )}
+      <span className="hidden" aria-hidden="true">
         {tz.replace("_", " ")}
       </span>
     </div>

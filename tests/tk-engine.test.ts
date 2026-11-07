@@ -265,6 +265,25 @@ test("4d. a batch moves together and never completes unrelated tasks", async () 
   closeDb(f.file);
 });
 
+test("4d1. fryer batches split at equipment batchMax and never cross orders", async () => {
+  const f = fresh();
+  const a = await tk.createOrder(f.db, { channel: "walk_in", promisedMinutes: 30, items: [{ recipe: "fries", qty: 5 }] });
+  const b = await tk.createOrder(f.db, { channel: "walk_in", promisedMinutes: 30, items: [{ recipe: "fries", qty: 2 }] });
+  const aa = rows(f, a.orderId).filter((t) => t.name === "Fry fries");
+  const bb = rows(f, b.orderId).filter((t) => t.name === "Fry fries");
+  assert.equal(new Set(aa.map((t) => t.batch_id)).size, 2); // one 4-portion batch plus one unbatched portion
+  assert.equal(aa.filter((t) => t.batch_id).length, 4);
+  assert.equal(new Set(bb.map((t) => t.batch_id)).size, 1);
+  assert.notEqual(aa[0].batch_id, bb[0].batch_id);
+  await tk.issue(f.db, a.orderId);
+  const frozen = () => rows(f, a.orderId).map(t => ({id:t.id,batch:t.batch_id,start:t.planned_start_ms,end:t.planned_end_ms,station:t.station_id}));
+  const issued = frozen();
+  await tk.createOrder(f.db, { channel: "delivery", etaMinutes: 10, items: [{ recipe: "fries", qty: 3 }] });
+  assert.deepEqual(frozen(), issued, "new work cannot change issued batch membership or intervals");
+  assertNoOverlap(f);
+  closeDb(f.file);
+});
+
 test("4e. modifiers and allergies keep portions out of a shared batch", async () => {
   const f = fresh();
   const mod = await tk.createOrder(f.db, {

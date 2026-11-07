@@ -10,7 +10,11 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   tone?: "primary" | "plain" | "danger";
 };
 
-export function Button({ tone = "plain", className = "", ...props }: ButtonProps) {
+export function Button({
+  tone = "plain",
+  className = "",
+  ...props
+}: ButtonProps) {
   const tones = {
     primary: "bg-brand text-on-brand border-brand hover:opacity-90",
     plain: "bg-panel text-ink border-line hover:bg-raised",
@@ -20,7 +24,7 @@ export function Button({ tone = "plain", className = "", ...props }: ButtonProps
     <button
       type="button"
       {...props}
-      className={`inline-flex min-h-14 min-w-14 items-center justify-center gap-2 rounded-xl border px-5 py-3 text-base font-bold shadow-sm transition active:translate-y-px disabled:opacity-50 ${tones[tone]} ${className}`}
+      className={`ui-button inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition active:translate-y-px disabled:opacity-50 ${tones[tone]} ${className}`}
     />
   );
 }
@@ -40,7 +44,7 @@ export function Pill({
   };
   return (
     <span
-      className={`inline-flex max-w-full shrink-0 items-center rounded-lg px-3 py-1.5 text-xs font-extrabold tracking-wide ${tones[tone]}`}
+      className={`inline-flex max-w-full shrink-0 items-center rounded-md px-2 py-1 text-[11px] font-semibold tracking-wide ${tones[tone]}`}
     >
       {children}
     </span>
@@ -112,4 +116,4 @@ export function Field({
 }
 
 export const inputClass =
-  "min-h-14 w-full min-w-0 rounded-xl border-2 border-line bg-raised px-4 text-ink placeholder:text-muted focus:border-brand focus:bg-panel";
+  "min-h-11 w-full min-w-0 rounded-lg border border-line bg-panel px-3 text-ink placeholder:text-muted focus:border-brand focus:bg-panel";

@@ -1,84 +1,168 @@
 "use client";
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, ArrowUpRight, ClipboardList, Truck, Clock3 } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useKitchen } from "./kitchen";
 import { ReceiptCard } from "./Receipt";
-
 type Filter = "active" | "drafts" | "released";
-
 export function OrdersView({ onNew }: { onNew: () => void }) {
-  const { snap, call, toast } = useKitchen();
+  const { snap, call, toast, fmt } = useKitchen();
   const [filter, setFilter] = useState<Filter>("active");
+  const [selected, setSelected] = useState<string | null>(null);
   if (!snap) return null;
-  const open = snap.orders.filter((o) => o.status === "DRAFT" || o.status === "RELEASED");
+  const open = snap.orders.filter(
+    (o) => o.status === "DRAFT" || o.status === "RELEASED",
+  );
   const shown = open
-    .filter((o) => (filter === "drafts" ? o.status === "DRAFT" : filter === "released" ? o.status === "RELEASED" : true))
+    .filter((o) =>
+      filter === "drafts"
+        ? o.status === "DRAFT"
+        : filter === "released"
+          ? o.status === "RELEASED"
+          : true,
+    )
     .sort((a, b) => a.targetMs - b.targetMs || a.number - b.number);
   const drafts = open.filter((o) => o.status === "DRAFT").length;
-  const released = open.length - drafts;
-
+  const current = shown.find((o) => o.id === selected) ?? shown[0];
+  const chips: [Filter, string, number][] = [
+    ["active", "All orders", open.length],
+    ["drafts", "Drafts", drafts],
+    ["released", "Released", open.length - drafts],
+  ];
   if (!open.length)
     return (
-      <div className="mx-auto mt-12 max-w-sm px-4 text-center">
-        <h2 className="text-2xl font-black">No open orders</h2>
-        <p className="mt-2 text-muted">Add an order as it comes in. Praxis plans every component and station for it.</p>
-        <Button tone="primary" className="mt-5 min-h-14 w-full text-base" onClick={onNew}>
-          <Plus size={18} aria-hidden="true" /> New order
+      <section className="orders-empty">
+        <div className="empty-order-art">
+          <ClipboardList size={37} strokeWidth={1.4} />
+          <span>
+            <Plus size={13} />
+          </span>
+        </div>
+        <span className="eyebrow">READY WHEN YOU ARE</span>
+        <h2>
+          A clear board.
+          <br />A fresh start.
+        </h2>
+        <p>
+          Add your first order. Praxis coordinates preparation around your
+          stations and pickup times.
+        </p>
+        <Button tone="primary" onClick={onNew}>
+          <Plus size={17} />
+          New order
         </Button>
-        <Button
-          className="mt-2 w-full"
+        <button
+          className="sample-load"
           onClick={async () => {
             const r = await call("/api/sample", { action: "load" });
-            if (!r.ok) toast(r.error ?? "Couldn't load samples.");
+            if (!r.ok) toast(r.error ?? "Couldn’t load sample orders.");
           }}
         >
           Try it with sample orders
-        </Button>
-      </div>
+          <ArrowUpRight size={14} />
+        </button>
+        <div className="empty-flow">
+          <span>01 Receive</span>
+          <i />
+          <span>02 Prepare</span>
+          <i />
+          <span>03 Pack & hand off</span>
+        </div>
+      </section>
     );
-
-  const chips: [Filter, string][] = [
-    ["active", `All (${open.length})`],
-    ["drafts", `Drafts (${drafts})`],
-    ["released", `Released (${released})`],
-  ];
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div role="group" aria-label="Filter orders" className="flex max-w-full flex-wrap gap-2">
-          {chips.map(([id, label]) => (
+    <div className="order-workspace">
+      <div className="order-toolbar">
+        <div role="group" aria-label="Filter orders" className="order-filters">
+          {chips.map(([id, label, n]) => (
             <button
               key={id}
-              type="button"
               aria-pressed={filter === id}
               onClick={() => setFilter(id)}
-              className={`min-h-14 rounded-xl border px-3 text-sm font-bold sm:px-5 sm:text-base ${filter === id ? "border-brand bg-brand text-on-brand" : "border-line bg-panel"}`}
             >
               {label}
+              <span>{n}</span>
             </button>
           ))}
         </div>
         {open.some((o) => o.sample) && (
           <button
-            type="button"
-            className="min-h-14 text-sm font-semibold underline"
+            className="clear-samples"
             onClick={() => call("/api/sample", { action: "clear" })}
           >
             Clear sample orders
           </button>
         )}
       </div>
-      {drafts > 0 && (
-        <p className="mb-5 rounded-2xl border border-warn/20 bg-warn-soft p-4 text-base font-semibold text-warn">
-          {drafts} draft{drafts === 1 ? "" : "s"} waiting. Drafts can still move when estimates change. A manager releases each
-          one to send it to the stations.
-        </p>
-      )}
-      <div className="grid items-start gap-5 xl:grid-cols-2">
-        {shown.map((o) => (
-          <ReceiptCard key={o.id} order={o} />
-        ))}
+      <div className="order-master-detail">
+        <aside className="order-list" aria-label="Order list">
+          <div className="order-list-heading">
+            <span>ORDER QUEUE</span>
+            <span>{shown.length} orders</span>
+          </div>
+          {shown.map((o) => (
+            <button
+              key={o.id}
+              className={`order-list-card ${current?.id === o.id ? "is-selected" : ""}`}
+              onClick={() => setSelected(o.id)}
+              aria-label={`Select order ${o.number}`}
+              aria-pressed={current?.id === o.id}
+            >
+              <div className="order-list-card-top">
+                <b>#{o.number}</b>
+                <span
+                  className={
+                    o.status === "DRAFT" ? "queue-draft" : "queue-issued"
+                  }
+                >
+                  {o.status === "DRAFT" ? "Draft" : "Released"}
+                </span>
+              </div>
+              <strong>{o.customer || "Guest"}</strong>
+              <p>
+                {o.itemCount} items · {o.items.map((i) => i.name).join(", ")}
+              </p>
+              <div className="order-list-card-bottom">
+                <span>
+                  <Truck size={13} />
+                  {o.driver ? fmt(o.driver.arrivalMs) : fmt(o.promisedMs)}
+                </span>
+                <span
+                  className={
+                    o.plan.risk === "at_risk" ? "queue-risk" : "queue-ontime"
+                  }
+                >
+                  <i />
+                  {o.plan.risk === "at_risk"
+                    ? "At risk"
+                    : o.plan.risk === "no_plan"
+                      ? "Planning"
+                      : "On time"}
+                </span>
+              </div>
+            </button>
+          ))}
+          {!shown.length && (
+            <p className="list-empty">No {filter} orders right now.</p>
+          )}
+          <div className="queue-note">
+            <Clock3 size={14} />
+            <span>
+              Ordered by pickup target.
+              <br />
+              Issued plans stay fixed.
+            </span>
+          </div>
+        </aside>
+        <div className="receipt-detail">
+          {current ? (
+            <ReceiptCard key={current.id} order={current} />
+          ) : (
+            <div className="receipt-placeholder">
+              Select an order to view its receipt.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

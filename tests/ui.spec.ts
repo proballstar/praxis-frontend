@@ -51,7 +51,8 @@ function normalizeClock(text: string) {
 
 test('empty install through receipt, stations, packing and pickup', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Set up your kitchen' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your kitchen. All in sync.' })).toBeVisible();
+  await expect(page.getByLabel('Restaurant name', { exact: true })).toHaveCSS('min-height', '44px');
   await page.getByLabel('Restaurant name', { exact: true }).fill('Praxis test kitchen');
   await page.getByRole('button', { name: 'Open the board', exact: true }).click();
   const clock = page.getByRole('timer', { name: /^Restaurant time/ });
@@ -241,6 +242,11 @@ test('tablet and phone layouts fit the viewport', async ({ page }) => {
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     }
     await view(page, 'Orders');
+    const choices = page.getByRole('button', { name: /^Select order/ });
+    const lastChoice = choices.last();
+    const choiceLabel = await lastChoice.getAttribute('aria-label');
+    await lastChoice.click();
+    await expect(page.getByRole('article', { name: choiceLabel!.replace('Select order', 'Order'), exact: true })).toBeVisible();
     await page.screenshot({ path: `/tmp/praxis-${name}.png`, fullPage: true });
   }
 });

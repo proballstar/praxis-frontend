@@ -1,20 +1,22 @@
-import { Metrics } from "./engine";
+import { Metrics, Outcome } from "./engine";
 import {
   Action,
-  KitchenSettings,
   Order,
+  OrderLine,
   Service,
   ServiceError,
-  atTime,
-  estimatePrep,
+  etaStatus,
+  itemsText,
   openOrders,
   planFor,
+  recommendation,
   reduce,
 } from "./service";
+import { matchMenu } from "./ticket";
 
 /**
- * Changes the assistant can test or propose. Every number returned here comes
- * from the shift rules and planner, never from the model.
+ * Changes that can be tested on a copy of the board. Every number here comes
+ * from the shift rules and planner, never from a model.
  */
 export type Change = {
   kind:
@@ -24,12 +26,13 @@ export type Change = {
     | "courier_here"
     | "cancel"
     | "apply_recommended"
-    | "set_stations";
+    | "resource_down";
   ticket?: string;
   minutes?: number;
   items?: { name: string; qty: number }[];
   prep_minutes?: number;
-  stations?: number;
+  resource?: string;
+  units?: number;
 };
 
 export type Proposal = {
@@ -41,7 +44,25 @@ export type Proposal = {
   after: Metrics;
 };
 
-const normal = (s: string) => s.trim().toLowerCase();
+export type Shift = { ref: string; minutes: number };
+
+/** Who gains and who pays when one outcome replaces another. */
+export type Tradeoff = { earlier: Shift[]; later: Shift[] };
+
+export type Simulation = Proposal & {
+  tradeoff: Tradeoff;
+  summary: string;
+  /** Reordering on top of the change, when that is worth doing. */
+  reorder: {
+    actions: Action[];
+    after: Metrics;
+    tradeoff: Tradeoff;
+    summary: string;
+    sequence: string[];
+  } | null;
+  /** Tickets whose courier time should be checked before trusting this. */
+  unconfirmed: string[];
+};
 
 function open(s: Service, ticket?: string): Order {
   const ref = (ticket ?? "").replace(/^#/, "").trim();
@@ -55,29 +76,32 @@ function need(value: number | undefined, label: string) {
   return value;
 }
 
-function newOrder(s: Service, c: Change) {
+function orderLines(s: Service, c: Change): OrderLine[] {
   if (!c.items?.length) throw new ServiceError("Add at least one item.");
-  const lines = c.items.map((item) => ({
-    item,
-    menu: s.menu.find((m) => normal(m.name) === normal(item.name)),
-  }));
-  const unknown = lines.find((l) => !l.menu);
-  if (unknown && c.prep_minutes === undefined)
-    throw new ServiceError(
-      `"${unknown.item.name}" isn't on the menu, so a prep time is needed.`,
-    );
-  const prep =
-    c.prep_minutes ??
-    estimatePrep(lines.map((l) => ({ minutes: l.menu!.minutes, qty: l.item.qty })));
-  return {
-    ref: c.ticket,
-    items: lines
-      .map((l) => `${l.item.qty} × ${l.menu?.name ?? l.item.name}`)
-      .join(", "),
-    prep,
-    etaMinutes: need(c.minutes, "Courier arrival"),
-  };
+  return c.items.map((item) => {
+    const { menuId, uncertain } = matchMenu(item.name, s.menu);
+    if (menuId && !uncertain)
+      return {
+        menuId,
+        qty: item.qty,
+        ...(c.prep_minutes ? { minutes: c.prep_minutes } : {}),
+      };
+    if (c.prep_minutes === undefined)
+      throw new ServiceError(
+        `"${item.name}" isn't on the menu, so a prep time is needed.`,
+      );
+    return { name: item.name, qty: item.qty, minutes: c.prep_minutes };
+  });
 }
+
+const resourceByName = (s: Service, name?: string) => {
+  const wanted = (name ?? "").trim().toLowerCase();
+  const found = s.resources.find(
+    (r) => r.id === wanted || r.name.toLowerCase() === wanted,
+  );
+  if (!found) throw new ServiceError(`No resource called "${name ?? ""}".`);
+  return found;
+};
 
 export function compile(s: Service, changes: Change[]) {
   if (!changes.length) throw new ServiceError("No changes were given.");
@@ -86,10 +110,16 @@ export function compile(s: Service, changes: Change[]) {
   for (const c of changes) {
     switch (c.kind) {
       case "add_order": {
-        const order = newOrder(s, c);
+        const eta = need(c.minutes, "Courier arrival");
+        const order = {
+          ref: c.ticket,
+          lines: orderLines(s, c),
+          etaMinutes: eta,
+        };
         actions.push({ type: "addOrder", order });
+        const dishes = c.items!.map((i) => `${i.qty} × ${i.name}`).join(", ");
         lines.push(
-          `Add ${order.ref ? `#${order.ref}: ` : ""}${order.items} (${order.prep} min prep, courier in ${order.etaMinutes} min)`,
+          `Add ${c.ticket ? `#${c.ticket}: ` : ""}${dishes} (courier in ${eta} min)`,
         );
         break;
       }
@@ -123,17 +153,21 @@ export function compile(s: Service, changes: Change[]) {
         actions.push({ type: "optimize" });
         lines.push("Use the recommended cooking order");
         break;
-      case "set_stations": {
-        const stations = need(c.stations, "Station count");
-        const settings: KitchenSettings = {
-          name: s.name,
-          stations,
-          graceMinutes: s.graceMinutes,
-          packMinutes: s.packMinutes,
-          menu: s.menu,
-        };
-        actions.push({ type: "configure", settings });
-        lines.push(`Run ${stations} cooking station${stations === 1 ? "" : "s"}`);
+      case "resource_down": {
+        const resource = resourceByName(s, c.resource);
+        const units = need(c.units, "Units out");
+        const minutes = need(c.minutes, "Time out of action");
+        actions.push({
+          type: "resourceDown",
+          resource: resource.id,
+          units,
+          minutes,
+        });
+        lines.push(
+          units
+            ? `${resource.name}: ${units} of ${resource.capacity} out for ${minutes} min`
+            : `${resource.name} is back`,
+        );
         break;
       }
       default:
@@ -147,40 +181,87 @@ export function compile(s: Service, changes: Change[]) {
 export function boardFacts(s: Service, now: number) {
   const p = planFor(s, now);
   const slot = new Map(p.current.slots.map((x) => [x.id, x]));
+  const ref = (id: string) => s.orders.find((o) => o.id === id)!.ref;
   return {
-    stations: s.stations,
-    menu: s.menu.map((m) => ({ name: m.name, prep_minutes: m.minutes })),
+    resources: s.resources.map((r) => ({
+      name: r.name,
+      capacity: r.capacity,
+      units_out: r.down && now < r.down.until ? r.down.units : 0,
+    })),
+    menu: s.menu.map((m) => ({
+      name: m.name,
+      prep_minutes: m.minutes,
+      resource: m.resource,
+      quality_window_minutes: m.qualityMinutes,
+    })),
     orders: openOrders(s).map((o) => {
       const x = slot.get(o.id);
       return {
         ticket: o.ref,
-        items: o.items,
+        items: itemsText(o.items),
         status: o.status,
-        station: o.station,
         courier_in: Math.round((o.arrival - now) / 60_000),
-        courier_here: o.courierHereAt !== undefined,
-        ready_in: x?.end,
+        courier_time: etaStatus(s, o, now),
+        ready_in: x?.ready,
         starts_in: x?.start,
         late_by: x?.late,
         courier_waits: x?.driverWait,
+        minutes_past_quality_window: x?.quality,
       };
     }),
-    cooking_order: p.current.sequence.map(
-      (id) => s.orders.find((o) => o.id === id)!.ref,
-    ),
+    cooking_order: p.current.sequence.map(ref),
     projected: p.current.metrics,
-    recommended_order: p.shouldChange
-      ? p.best.sequence.map((id) => s.orders.find((o) => o.id === id)!.ref)
-      : null,
+    recommended_order: p.shouldChange ? p.best.sequence.map(ref) : null,
     recommended_projected: p.shouldChange ? p.best.metrics : null,
     search: p.method,
   };
 }
 
-/** Runs changes on a copy through the real rules. The live board is not touched. */
-export function simulate(s: Service, now: number, changes: Change[]) {
+export function tradeoffBetween(s: Service, from: Outcome, to: Outcome): Tradeoff {
+  const earlier: Shift[] = [];
+  const later: Shift[] = [];
+  for (const slot of to.slots) {
+    const was = from.slots.find((x) => x.id === slot.id);
+    const ref = s.orders.find((o) => o.id === slot.id)?.ref;
+    if (!was || !ref) continue;
+    const change = slot.ready - was.ready;
+    if (change < 0) earlier.push({ ref, minutes: -change });
+    if (change > 0) later.push({ ref, minutes: change });
+  }
+  return { earlier, later };
+}
+
+const list = (shifts: Shift[]) =>
+  shifts.map((x) => `#${x.ref} by ${x.minutes} min`).join(", ");
+
+/** A deterministic sentence naming the cost as well as the gain. */
+export function describe(a: Metrics, b: Metrics, t: Tradeoff) {
+  const parts: string[] = [];
+  if (t.earlier.length) parts.push(`Earlier: ${list(t.earlier)}.`);
+  if (t.later.length) parts.push(`Later: ${list(t.later)}.`);
+  const delta = (label: string, x: number, y: number) =>
+    x === y ? null : `${label} ${x} → ${y} min`;
+  const totals = [
+    delta("courier waiting", a.wait, b.wait),
+    delta("lateness", a.lateness, b.lateness),
+    delta("food sitting", a.idle, b.idle),
+    delta("past quality window", a.quality, b.quality),
+  ].filter(Boolean);
+  if (totals.length) {
+    const sentence = totals.join(", ");
+    parts.push(`${sentence[0].toUpperCase()}${sentence.slice(1)}.`);
+  }
+  return parts.join(" ") || "No predicted change.";
+}
+
+/** Tests changes on a copy through the real rules. The live board is not touched. */
+export function simulate(
+  s: Service,
+  now: number,
+  changes: Change[],
+): Simulation {
   const { actions, lines } = compile(s, changes);
-  const before = planFor(s, now).current.metrics;
+  const start = planFor(s, now);
   const next = reduce(
     s,
     { type: "batch", label: "simulation", baseRev: s.rev, actions },
@@ -188,31 +269,52 @@ export function simulate(s: Service, now: number, changes: Change[]) {
     ((n) => () => `simulated-${++n}`)(0),
   );
   const p = planFor(next, now);
-  const clock = new Map(p.current.slots.map((x) => [x.id, x]));
+  const tradeoff = tradeoffBetween(next, start.current, p.current);
+  const reorderTradeoff = tradeoffBetween(next, p.current, p.best);
+  const reorder =
+    p.shouldChange && recommendation({ ...next, dismissedPlan: null }, p, now)
+      ? {
+          actions: [...actions, { type: "optimize" as const }],
+          after: p.best.metrics,
+          tradeoff: reorderTradeoff,
+          summary: describe(p.current.metrics, p.best.metrics, reorderTradeoff),
+          sequence: p.best.sequence.map(
+            (id) => next.orders.find((o) => o.id === id)!.ref,
+          ),
+        }
+      : null;
   return {
-    proposal: {
-      baseRev: s.rev,
-      lines,
-      actions,
-      before,
-      after: p.current.metrics,
-    } as Proposal,
-    facts: {
-      changes: lines,
-      before,
-      after: p.current.metrics,
-      after_if_recommended_order_is_also_used: p.shouldChange
-        ? p.best.metrics
-        : null,
-      orders: openOrders(next).map((o) => ({
-        ticket: o.ref,
-        ready_in: clock.get(o.id)?.end,
-        ready_at: clock.get(o.id)
-          ? new Date(atTime(now, clock.get(o.id)!.end)).toISOString()
-          : undefined,
-        late_by: clock.get(o.id)?.late,
-        courier_waits: clock.get(o.id)?.driverWait,
-      })),
+    baseRev: s.rev,
+    lines,
+    actions,
+    before: start.current.metrics,
+    after: p.current.metrics,
+    tradeoff,
+    summary: describe(start.current.metrics, p.current.metrics, tradeoff),
+    reorder,
+    unconfirmed: openOrders(next)
+      .filter((o) => {
+        const status = etaStatus(next, o, now);
+        return status === "stale" || status === "unknown";
+      })
+      .map((o) => o.ref),
+  };
+}
+
+/** What the assistant is told about a simulation. */
+export function simulationFacts(r: Simulation) {
+  return {
+    changes: r.lines,
+    before: r.before,
+    after: r.after,
+    who_moves: r.tradeoff,
+    summary: r.summary,
+    reorder_on_top: r.reorder && {
+      sequence: r.reorder.sequence,
+      after: r.reorder.after,
+      who_moves: r.reorder.tradeoff,
+      summary: r.reorder.summary,
     },
+    courier_times_to_confirm: r.unconfirmed,
   };
 }

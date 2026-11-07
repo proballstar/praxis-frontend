@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   MessageCircleQuestion,
+  LifeBuoy,
   Plus,
   Settings,
   Undo2,
@@ -12,6 +13,7 @@ import { Board, ReviewPlan } from "@/components/Board";
 import { AskPraxis, ShiftReportView } from "@/components/Extras";
 import { KitchenForm } from "@/components/KitchenForm";
 import { NewOrderForm } from "@/components/NewOrder";
+import { RushRecovery } from "@/components/Rush";
 import { Button, Sheet, clock, plural } from "@/components/ui";
 import {
   Action,
@@ -115,7 +117,14 @@ function Setup({ onSubmit, initial }: { onSubmit: (s: KitchenSettings) => Promis
   );
 }
 
-type SheetName = "order" | "review" | "ask" | "report" | "settings" | null;
+type SheetName =
+  | "order"
+  | "review"
+  | "rush"
+  | "ask"
+  | "report"
+  | "settings"
+  | null;
 
 export default function Home() {
   const [notice, setNotice] = useState("");
@@ -176,9 +185,11 @@ export default function Home() {
   const lateSoon = plan.current.slots.filter((s) => s.late > 0).length;
   const settings: KitchenSettings = {
     name: service.name,
-    stations: service.stations,
+    resources: service.resources,
     graceMinutes: service.graceMinutes,
     packMinutes: service.packMinutes,
+    holdBufferMinutes: service.holdBufferMinutes,
+    staleEtaMinutes: service.staleEtaMinutes,
     menu: service.menu,
   };
 
@@ -208,6 +219,9 @@ export default function Home() {
               onClick={() => dispatch({ type: "undo" })}
             >
               <Undo2 size={19} />
+            </IconButton>
+            <IconButton label="Rush Recovery" onClick={() => setSheet("rush")}>
+              <LifeBuoy size={19} />
             </IconButton>
             <IconButton label="Ask Praxis" onClick={() => setSheet("ask")}>
               <MessageCircleQuestion size={19} />
@@ -248,7 +262,11 @@ export default function Home() {
 
       {sheet === "order" && (
         <Sheet title="New order" onClose={closeSheet}>
-          <NewOrderForm menu={service.menu} onSubmit={addOrder} />
+          <NewOrderForm
+            menu={service.menu}
+            resources={service.resources}
+            onSubmit={addOrder}
+          />
         </Sheet>
       )}
       {sheet === "review" && (
@@ -267,6 +285,16 @@ export default function Home() {
               });
               setSheet(null);
             }}
+          />
+        </Sheet>
+      )}
+      {sheet === "rush" && (
+        <Sheet title="Rush Recovery" onClose={closeSheet}>
+          <RushRecovery
+            service={service}
+            now={planningMoment}
+            dispatch={dispatch}
+            onClose={closeSheet}
           />
         </Sheet>
       )}

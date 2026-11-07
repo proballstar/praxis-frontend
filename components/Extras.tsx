@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Proposal } from "@/lib/changes";
+import { Simulation } from "@/lib/changes";
 import { Service, openOrders, report } from "@/lib/service";
 import { Dispatch } from "./Board";
 import { Button, clock, inputClass } from "./ui";
@@ -45,16 +45,16 @@ export function ShiftReportView({
             value={`${Math.round((r.onTime / r.orders) * 100)}%`}
           />
           <Stat label="Avg courier wait" value={minutes(r.avgCourierWait)} />
-          <Stat
-            label="Avg over estimate"
-            value={minutes(r.avgOverrun)}
-          />
+          <Stat label="Avg over estimate" value={minutes(r.avgOverrun)} />
+          <Stat label="Avg food sitting" value={minutes(r.avgFoodSitting)} />
+          <Stat label="Dishes past their window" value={String(r.pastWindow)} />
         </div>
       )}
       {r.orders > 0 && (
         <p className="text-xs text-muted">
-          Based on when staff tapped Ready and Courier here. If orders keep
-          running over estimate, raise those prep minutes in Settings.
+          Observed results, based on what staff tapped: Done, Ready, Courier
+          here and Picked up. If dishes keep running over estimate, raise those
+          prep minutes in Settings.
         </p>
       )}
       <div>
@@ -111,7 +111,7 @@ type Turn = {
   role: "user" | "assistant";
   content: string;
   ai?: boolean;
-  proposal?: Proposal;
+  proposal?: Simulation;
   outcome?: "approved" | "declined";
 };
 
@@ -120,7 +120,7 @@ function ProposalCard({
   outcome,
   onDecide,
 }: {
-  proposal: Proposal;
+  proposal: Simulation;
   outcome?: Turn["outcome"];
   onDecide: (approved: boolean) => Promise<void>;
 }) {
@@ -133,9 +133,11 @@ function ProposalCard({
           <li key={line}>{line}</li>
         ))}
       </ul>
-      <p className="mt-2 text-xs text-muted">
-        Courier waiting {before.wait} → {after.wait} min · Lateness{" "}
-        {before.lateness} → {after.lateness} min
+      <p className="mt-2 text-xs text-muted">{proposal.summary}</p>
+      <p className="mt-1 text-xs text-muted">
+        Courier waiting {before.wait} → {after.wait} min · Food sitting{" "}
+        {before.idle} → {after.idle} min · Lateness {before.lateness} →{" "}
+        {after.lateness} min
       </p>
       {outcome ? (
         <p className="mt-2 text-sm font-semibold text-muted">

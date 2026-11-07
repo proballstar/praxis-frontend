@@ -1,6 +1,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { Action, Service, emptyService, isService, reduce } from "./service";
+import {
+  Action,
+  Service,
+  emptyService,
+  isService,
+  migrate,
+  reduce,
+} from "./service";
 
 /** One JSON file, shared by every device pointed at this server. */
 const file = () =>
@@ -18,10 +25,9 @@ export async function load(): Promise<Service> {
   }
   // Unreadable data stops the app instead of silently starting a blank shift
   // that would overwrite it on the next tap.
-  const parsed: unknown = JSON.parse(raw);
+  const parsed = migrate(JSON.parse(raw), Date.now());
   if (!isService(parsed)) throw Error(`Unrecognized data in ${file()}`);
-  // Saves made before packing time existed get the default.
-  return { ...parsed, packMinutes: parsed.packMinutes ?? 2 };
+  return parsed;
 }
 
 async function save(service: Service) {

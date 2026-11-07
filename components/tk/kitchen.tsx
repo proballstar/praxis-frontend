@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { requestId as createRequestId } from "@/lib/request-id";
 import type { Snapshot } from "@/lib/tk/snapshot";
 import { clockParts, formatTime } from "@/lib/tk/time";
 
@@ -111,7 +112,7 @@ export function KitchenProvider({ children }: { children: ReactNode }) {
    */
   const call = useCallback(
     async (path: string, body: object = {}, method: "POST" | "GET" = "POST"): Promise<CallResult> => {
-      const requestId = crypto.randomUUID();
+      const requestId = createRequestId();
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const response = await fetch(path, {

@@ -267,3 +267,22 @@ test('API rejects invalid and cross-site mutations', async ({ page }) => {
   const assistant = await page.request.post('/api/assistant', { data: { messages: [] } });
   expect(assistant.status()).toBe(400);
 });
+
+test('Start records cooking when the secure-context UUID API is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis.crypto, 'randomUUID', { value: undefined, configurable: true });
+  });
+  const order = await releasedBurger(page);
+  await page.goto('/#stations');
+  await view(page, 'Stations');
+  await page.getByRole('tab', { name: /^Grill/ }).click();
+  const card = page.getByRole('article', { name: `Burger for order ${order.number}`, exact: true });
+  const response = page.waitForResponse(r => r.url().includes('/api/tasks/') && r.request().method() === 'POST');
+  await card.getByRole('button', { name: `Start Burger for order ${order.number}`, exact: true }).click();
+  expect((await response).ok()).toBe(true);
+  await expect(card.getByRole('timer')).toContainText('left');
+  await expect(card.getByRole('button', { name: /^Start / })).toHaveCount(0);
+  const saved = (await state(page)).orders.find(o => o.id === order.orderId)!;
+  expect(saved.tasks.find(t => t.name === 'Grill burger')?.status).toBe('COOKING');
+  expect(saved.tasks.find(t => t.name === 'Grill burger')?.actualStartMs).not.toBeNull();
+});

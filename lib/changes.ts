@@ -12,7 +12,7 @@ import {
   recommendation,
   reduce,
 } from "./service";
-import { matchMenu } from "./ticket";
+import { matchMenu } from "./menu-match";
 
 /**
  * Changes that can be tested on a copy of the board. Every number here comes

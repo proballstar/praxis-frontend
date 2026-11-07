@@ -1,12 +1,19 @@
 "use client";
 import { FormEvent, useRef, useState } from "react";
-import { FileText, ImagePlus, Minus, Plus, X } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
 import { KitchenResource, MenuItem, NewOrder, OrderLine } from "@/lib/service";
-import { DraftLine, TicketDraft } from "@/lib/ticket";
 import { Button, Field, inputClass } from "./ui";
 
 const ETA_CHOICES = [5, 10, 15, 20, 30, 45];
-const MAX_IMAGE_SIDE = 1600;
+
+type DraftLine = {
+  name: string;
+  qty: number;
+  note: string;
+  menuId: string | null;
+  /** The dish needs a person to check it before the order can be added. */
+  uncertain: boolean;
+};
 
 type Line = DraftLine & {
   key: string;
@@ -14,128 +21,6 @@ type Line = DraftLine & {
   resource: string;
   confirmed: boolean;
 };
-
-/** Shrinks a photo before upload, which keeps the request small and the AI cheap. */
-function shrink(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => {
-      const scale = Math.min(
-        1,
-        MAX_IMAGE_SIDE / Math.max(image.width, image.height),
-      );
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(image.width * scale);
-      canvas.height = Math.round(image.height * scale);
-      canvas.getContext("2d")!.drawImage(image, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.85));
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(Error("That file couldn't be read as an image."));
-    };
-    image.src = url;
-  });
-}
-
-function ImportTicket({
-  onDraft,
-}: {
-  onDraft: (draft: TicketDraft) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const file = useRef<HTMLInputElement>(null);
-
-  async function send(body: { text?: string; image?: string }) {
-    setBusy(true);
-    setError("");
-    try {
-      const response = await fetch("/api/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const result = await response.json();
-      if (!response.ok) throw Error(result.error);
-      if (!result.draft.lines.length)
-        throw Error("No dishes found on that ticket. Add them by hand.");
-      onDraft(result.draft);
-      setOpen(false);
-      setText("");
-    } catch (e) {
-      setError(
-        e instanceof Error && e.message ? e.message : "Import failed. Try again.",
-      );
-    }
-    setBusy(false);
-  }
-
-  if (!open)
-    return (
-      <Button className="w-full" onClick={() => setOpen(true)}>
-        <FileText size={16} /> Import a ticket
-      </Button>
-    );
-
-  return (
-    <div className="space-y-2 rounded-lg border border-line p-3">
-      <textarea
-        className={`${inputClass} min-h-28 py-2`}
-        aria-label="Ticket text"
-        placeholder="Paste the ticket text"
-        maxLength={4000}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-      <div className="flex gap-2">
-        <Button
-          tone="primary"
-          className="flex-1"
-          disabled={busy || !text.trim()}
-          onClick={() => send({ text })}
-        >
-          Read text
-        </Button>
-        <Button
-          className="flex-1"
-          disabled={busy}
-          onClick={() => file.current?.click()}
-        >
-          <ImagePlus size={16} /> Upload photo
-        </Button>
-        <input
-          ref={file}
-          type="file"
-          accept="image/*"
-          aria-label="Ticket photo"
-          className="hidden"
-          onChange={async (e) => {
-            const picked = e.target.files?.[0];
-            e.target.value = "";
-            if (!picked) return;
-            try {
-              await send({ image: await shrink(picked) });
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Import failed.");
-            }
-          }}
-        />
-      </div>
-      {busy && <p className="text-sm text-muted">Reading the ticket…</p>}
-      {error && <p className="text-sm text-bad">{error}</p>}
-      <p className="text-xs text-muted">
-        You review everything before an order is created. With AI connected, the
-        ticket is sent to the AI provider, so use made-up customer details in a
-        demo.
-      </p>
-    </div>
-  );
-}
 
 function ReviewLine({
   line,
@@ -306,13 +191,6 @@ export function NewOrderForm({
       }),
     );
 
-  function applyDraft(draft: TicketDraft) {
-    if (draft.ref) setRef(draft.ref);
-    if (draft.customer) setCustomer(draft.customer);
-    setEta(draft.etaMinutes);
-    setLines(draft.lines.map(newLine));
-  }
-
   const review = lines.filter(
     (l) => l.menuId === null || l.uncertain || l.note,
   );
@@ -345,7 +223,6 @@ export function NewOrderForm({
 
   return (
     <form onSubmit={submit} className="space-y-5">
-      <ImportTicket onDraft={applyDraft} />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Ticket number" hint="Leave blank to number it for you">
           <input

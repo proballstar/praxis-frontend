@@ -1,6 +1,6 @@
 # Praxis
 
-A live kitchen board for restaurants handling delivery orders. Praxis helps staff adapt when the kitchen gets disrupted, keeps food fresh, and cuts order-entry work. It works dish by dish, across named equipment with limited capacity, and tells you what to start next so food and couriers meet on time. It recommends changes, explains who gains and who pays, and changes nothing until someone approves.
+A live kitchen board for restaurants handling delivery orders. Praxis helps staff adapt when the kitchen gets disrupted and keeps food fresh. It works dish by dish, across named equipment with limited capacity, and tells you what to start next so food and couriers meet on time. It recommends changes, explains who gains and who pays, and changes nothing until someone approves.
 
 ## Run it
 
@@ -14,11 +14,11 @@ Open **http://localhost:3100** and set up your kitchen: resources and their capa
 
 Every device on the same Wi-Fi can open `http://<this-computer's-IP>:3100` and share the same live board. Keep the computer awake during service.
 
-**To demo safely:** `npm run demo` starts a fresh, separate kitchen on port 3200 with its own data file (`data/demo.json`, reset each time). Your real kitchen isn't touched. A synthetic ticket for import is in `public/demo/sample-ticket.txt` and `.png`.
+**To demo safely:** `npm run demo` starts a fresh, separate kitchen on port 3200 with its own data file (`data/demo.json`, reset each time). Your real kitchen isn't touched.
 
 ## During a shift
 
-1. **New order:** tap dishes, or **Import a ticket** by pasting its text or uploading a photo. Pick when the courier arrives, or **Not known yet**.
+1. **New order:** tap dishes, then pick when the courier arrives, or **Not known yet**.
 2. **Up next** shows when to start each ticket and when it will be ready. Start what's due. Dishes are timed to finish together, longest first.
 3. **Cooking** shows each dish with its timer. Tap **Done** per dish, then **Packed and ready**, then **Picked up**.
 4. **Rush Recovery** (life ring, top bar) is for when the plan breaks: a courier early or late, an order needing more time, or equipment down. It simulates on a private copy and shows the result of keeping your order and of reordering, including who gets later. Approve one, or cancel and nothing changes.
@@ -72,7 +72,7 @@ The numbers are computed, never generated. The reference case (an in-progress or
 
 ## Current limits
 
-- **Orders aren't connected to any platform.** There is no live DoorDash or Uber Eats integration, because that requires partner API access. Orders come from tapping or ticket import, and courier times don't update themselves.
+- **Orders aren't connected to any platform.** There is no live DoorDash or Uber Eats integration, because that requires partner API access. Orders are entered by tapping, and courier times don't update themselves.
 - **One step per dish.** A burger uses the grill, but not the grill and then assembly. Packing is a flat per-order time with no capacity limit. Batch cooking isn't modeled.
 - **One kitchen, one computer.** Data is one file at `data/service.json` (set `PRAXIS_DATA_FILE` to move it). Hosting without a persistent disk, such as Vercel, won't keep it.
 - **Voice entry** for menu dishes needs `localhost` or HTTPS, so it doesn't work over the plain phone address, and it isn't available in Firefox.
@@ -86,23 +86,23 @@ The numbers are computed, never generated. The reference case (an in-progress or
 
 ## AI (optional)
 
-Without a key, everything above still works: **Ask Praxis** gives a plan summary, and pasted tickets are read by a built-in parser. To add AI:
+Without a key, everything above still works: **Ask Praxis** gives a plan summary. To add AI:
 
 ```sh
 cp .env.example .env.local   # then set OPENROUTER_API_KEY
 ```
 
-The default model is `anthropic/claude-haiku-5.5`, chosen for reliable tool use and image reading at low cost. Set `OPENROUTER_MODEL` to use another model with tools and vision.
+The default model is `anthropic/claude-haiku-5.5`, chosen for reliable tool use at low cost. Set `OPENROUTER_MODEL` to use another model with tools.
 
-**Ask Praxis** is an agent with three tools: `get_board` reads the board, `what_if` tests changes on a private copy using the real planner, and `propose_changes` validates changes and shows an **Approve** card. **Ticket import** reads text or photos into a draft.
+**Ask Praxis** is an agent with three tools: `get_board` reads the board, `what_if` tests changes on a private copy using the real planner, and `propose_changes` validates changes and shows an **Approve** card.
 
 Guardrails:
 
 - The model never does the scheduling. Times and every before-and-after number come from the planner, and the approval card's text is generated from the validated change, not written by the model.
 - It can't change anything itself. Only an Approve tap does, those changes apply all-or-nothing, and one Undo reverses them. It can't mark dishes started, done or picked up.
-- Tool inputs have strict types and limits. Ticket contents are treated as data: instructions hidden in a ticket are ignored, and imports always go through staff review, with unmatched and uncertain lines blocking the order until resolved.
+- Tool inputs have strict types and limits. Dish names and notes are treated as data: instructions hidden in them are ignored.
 - Each question is limited to 5 model steps, 500 output tokens per step, and 20 seconds. Across all devices the board allows 2 AI requests at a time and 20 per minute.
-- The assistant receives ticket numbers, items, times and the menu, not customer names. Ticket import does send whatever the ticket contains, and anything typed into a question is sent as written. Use synthetic tickets in demos.
+- The assistant receives ticket numbers, items, times and the menu, not customer names. Anything typed into a question is sent as written.
 - If AI is unavailable, Praxis falls back to the built-in behavior.
 
 ## Development
@@ -116,6 +116,6 @@ npx playwright install chromium
 npm run test:ui        # needs a current build; starts its own server on 3101 with throwaway data
 ```
 
-`lib/engine.ts` is the planner, `lib/service.ts` holds the shift rules, `lib/changes.ts` runs simulations, `lib/ticket.ts` reads tickets, `lib/agent.ts` is the assistant, `lib/store.ts` handles saving, and `components/` holds the screens. Saved kitchens from older versions upgrade automatically: each old station becomes a unit of one "Line" resource.
+`lib/engine.ts` is the planner, `lib/service.ts` holds the shift rules, `lib/changes.ts` runs simulations, `lib/agent.ts` is the assistant, `lib/store.ts` handles saving, and `components/` holds the screens. Saved kitchens from older versions upgrade automatically: each old station becomes a unit of one "Line" resource.
 
 The slide deck at `/demo/index.html` shows an earlier scripted demo, and its screenshots predate this version.

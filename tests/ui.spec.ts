@@ -22,18 +22,6 @@ const ticket = (page: Page, ref: string) =>
 
 test.describe.configure({ mode: "serial" });
 
-const ticketText = `Order #2047
-Customer: Sam Example
-Dasher arrives in 18 min
-
-2 x Burger $22.00
-  - no onion
-1 Fries $5.00
-1 Classic Pizza $16.00
-1 Lobster roll $19.00
-
-Total $67.50`;
-
 test("the happy path, from an empty install", async ({ page, browser }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -101,33 +89,6 @@ test("the happy path, from an empty install", async ({ page, browser }) => {
     tablet.getByRole("region", { name: /Up next/ }).locator("article").nth(1),
   ).toContainText("#1045");
   await tablet.close();
-
-  // Ticket import: reads the ticket, and blocks until a person resolves it.
-  await page.getByRole("button", { name: "New order" }).click();
-  const form = page.getByRole("dialog", { name: "New order" });
-  await form.getByRole("button", { name: "Import a ticket" }).click();
-  await form.getByLabel("Ticket text").fill(ticketText);
-  await form.getByRole("button", { name: "Read text" }).click();
-  await expect(form.getByLabel("Ticket number")).toHaveValue("2047");
-  await expect(form.getByLabel("Customer")).toHaveValue("Sam Example");
-  const add = form.getByRole("button", { name: "Add to queue" });
-  await expect(add).toBeDisabled();
-  await expect(form.getByText("Not on the menu", { exact: true })).toBeVisible();
-  await form.getByLabel("Prep minutes for Lobster roll").fill("9");
-  await expect(add).toBeDisabled();
-  await form
-    .getByRole("group", { name: "Review Classic Pizza" })
-    .getByLabel("This is right")
-    .check();
-  await expect(add).toBeEnabled();
-  await add.click();
-  await expect(form).toBeHidden();
-  await expect(ticket(page, "2047")).toContainText("Burger (no onion)");
-
-  await post(page, {
-    type: "cancel",
-    id: (await board(page)).orders.find((o: { ref: string }) => o.ref === "2047").id,
-  });
 
   // Run one ticket from start to handoff.
   await page.getByRole("button", { name: "Start #1043" }).click();
@@ -295,10 +256,6 @@ test("the API refuses bad requests and other sites", async ({ request }) => {
   expect((await ask([{ role: "system", content: "x" }])).status()).toBe(400);
   expect(
     (await ask([{ role: "user", content: "x".repeat(1001) }])).status(),
-  ).toBe(400);
-  expect((await send("/api/import", {})).status()).toBe(400);
-  expect(
-    (await send("/api/import", { image: "data:text/html;base64,AAAA" })).status(),
   ).toBe(400);
   const crossSite = await request.post("/api/service", {
     data: { action: { type: "undo" } },

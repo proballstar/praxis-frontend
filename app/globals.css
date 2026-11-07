@@ -18,31 +18,31 @@
 
 :root {
   color-scheme: light dark;
-  --bg: #f3f5f1;
+  --bg: #f1f3f2;
   --panel: #ffffff;
-  --raised: #f7f9f6;
-  --ink: #1e2d26;
-  --muted: #5f6e66;
-  --line: #dfe5df;
-  --brand: #2f6f50;
+  --raised: #f4f6f5;
+  --ink: #14251e;
+  --muted: #52645b;
+  --line: #ccd6d0;
+  --brand: #166344;
   --on-brand: #ffffff;
-  --soft: #e4f0e8;
-  --warn: #8a5a00;
-  --warn-soft: #fbf0d9;
-  --bad: #b3261e;
-  --bad-soft: #fbe6e3;
+  --soft: #e3f3ea;
+  --warn: #805100;
+  --warn-soft: #fff1d5;
+  --bad: #b42320;
+  --bad-soft: #ffebe8;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #101512;
-    --panel: #18201b;
-    --raised: #1f2923;
-    --ink: #e8efe9;
-    --muted: #9aa8a0;
-    --line: #2d3932;
-    --brand: #6cc196;
-    --on-brand: #0d1a13;
+    --bg: #0d1411;
+    --panel: #16221b;
+    --raised: #1e2d24;
+    --ink: #f1f6f2;
+    --muted: #b1c2b7;
+    --line: #3a4d41;
+    --brand: #7bd6a5;
+    --on-brand: #092216;
     --soft: #20382b;
     --warn: #f0c060;
     --warn-soft: #3a2f16;
@@ -53,6 +53,7 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -63,6 +64,7 @@ body {
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
   overscroll-behavior-y: none;
+  line-height: 1.5;
 }
 
 button {
@@ -75,12 +77,100 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 2px solid var(--brand);
+  outline: 3px solid var(--brand);
   outline-offset: 2px;
 }
 
 /* iOS zooms the page when a focused field is under 16px. */
-input,
-select {
-  font-size: 16px;
+@layer base {
+  input, select, textarea { font-size: 16px; }
+}
+
+/* Receipts and bag labels print once per order, in plain black on white. */
+@media print {
+  @page {
+    margin: 8mm;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-sheet {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}
+
+/* A shelf slot found by pickup code. */
+@keyframes slot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--brand);
+  }
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.slot-found {
+  animation: slot-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .slot-found {
+    animation: none;
+    outline: 4px solid var(--brand);
+  }
+}
+
+/* Tablet controls share one physical target size, even when a local utility
+   requests a compact control. Long kitchen notes wrap within their cards. */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  button, summary, a[href] { -webkit-tap-highlight-color: transparent; }
+  button, summary { min-height: 56px; }
+  button { white-space: normal; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    min-height: 56px;
+    max-width: 100%;
+  }
+  input[type="checkbox"] { cursor: pointer; }
+  article, section, [role="dialog"] { min-width: 0; overflow-wrap: anywhere; }
+  svg { flex-shrink: 0; }
+}
+
+.tk-header { box-shadow: 0 4px 20px rgb(10 35 22 / 0.07); }
+.tk-receipt, .tk-station, .tk-pack {
+  box-shadow: 0 2px 3px rgb(10 35 22 / 0.03), 0 8px 24px rgb(10 35 22 / 0.05);
+}
+.tk-receipt > header, .tk-pack > header {
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+.tk-receipt > section[aria-label="Items"] {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+.tk-station > div[aria-live="off"] {
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  background: var(--raised);
+}
+.tk-pack input[type="checkbox"] { border-radius: 0.5rem; }
+.tk-pack label:has(input:checked) { color: var(--brand); }
+@media (max-width: 639px) {
+  .tk-header [role="timer"] { flex-basis: 100%; }
+  .tk-header > div > div.min-w-0 { flex-basis: 100%; }
+  .tk-header button[title] { width: 56px; height: 56px; }
+  .tk-header button[title] svg { width: 20px; height: 20px; }
+  .tk-header > div { column-gap: 0.75rem; row-gap: 0.75rem; }
+  .tk-header > div > div:last-child { flex-wrap: wrap; }
+  .tk-header > div > div:last-child > button:last-child { flex: 1 0 100%; margin-left: 0; }
+}
+@media print {
+  .tk-receipt, .tk-station, .tk-pack { box-shadow: none; }
 }

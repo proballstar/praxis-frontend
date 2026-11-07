@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { ModelMessage } from "ai";
-import { openRouterModel, runAgent } from "@/lib/agent";
-import { brief } from "@/lib/service";
+import { openRouterModel, runAgent } from "@/lib/tk/agent";
+import { brief } from "@/lib/tk/brief";
 import { acquire } from "@/lib/limit";
-import { load } from "@/lib/store";
+import { database } from "@/lib/tk/server";
+import { buildSnapshot } from "@/lib/tk/snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +12,7 @@ const MAX_TURNS = 12;
 const MAX_LENGTH = 1000;
 
 function parse(value: unknown): ModelMessage[] | null {
-  if (!Array.isArray(value) || !value.length || value.length > MAX_TURNS)
-    return null;
+  if (!Array.isArray(value) || !value.length || value.length > MAX_TURNS) return null;
   const valid = value.every(
     (m) =>
       (m?.role === "user" || m?.role === "assistant") &&
@@ -31,8 +31,7 @@ export async function POST(request: Request) {
   } catch {
     messages = null;
   }
-  if (!messages)
-    return NextResponse.json({ error: "Invalid question." }, { status: 400 });
+  if (!messages) return NextResponse.json({ error: "Invalid question." }, { status: 400 });
 
   const release = acquire();
   if (!release)
@@ -42,18 +41,12 @@ export async function POST(request: Request) {
     );
 
   try {
-    const service = await load();
-    const now = Date.now();
-    const local = { answer: brief(service, now), mode: "local" };
-    if (!process.env.OPENROUTER_API_KEY || !service.configured)
-      return NextResponse.json(local);
+    const db = database();
+    const snapshot = await buildSnapshot(db);
+    const local = { answer: brief(snapshot), mode: "local" };
+    if (!process.env.OPENROUTER_API_KEY || !snapshot.configured) return NextResponse.json(local);
     try {
-      const { text, proposal } = await runAgent({
-        service,
-        now,
-        messages,
-        model: openRouterModel(),
-      });
+      const { text, proposal } = await runAgent({ db, messages, model: openRouterModel() });
       if (!text && !proposal) return NextResponse.json(local);
       return NextResponse.json({
         answer: text || "This change is ready for your approval.",
@@ -61,17 +54,11 @@ export async function POST(request: Request) {
         proposal,
       });
     } catch (error) {
-      console.error(
-        "Assistant unavailable:",
-        error instanceof Error ? error.name : "unknown error",
-      );
+      console.error("Assistant unavailable:", error instanceof Error ? error.name : "unknown error");
       return NextResponse.json(local);
     }
   } catch {
-    return NextResponse.json(
-      { error: "Praxis could not read this kitchen's data." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Praxis could not read this kitchen's data." }, { status: 500 });
   } finally {
     release();
   }

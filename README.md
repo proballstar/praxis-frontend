@@ -1,121 +1,144 @@
 # Praxis
 
-A live kitchen board for restaurants handling delivery orders. Praxis helps staff adapt when the kitchen gets disrupted and keeps food fresh. It works dish by dish, across named equipment with limited capacity, and tells you what to start next so food and couriers meet on time. It recommends changes, explains who gains and who pays, and changes nothing until someone approves.
+## What it is
 
-## Run it
+Praxis is an ordering and coordination site for a kitchen handling delivery, walk-in and phone orders. Each order is a receipt with a preparation schedule planned by OR-Tools CP-SAT: recipe steps, station start times, packing and a bag-ready estimate. Staff review a draft, release its instructions, record actual work, check and seal the bag, then confirm pickup.
+
+The Next.js app stores orders, tasks, checks and events in SQLite. `lib/tk/` contains the kitchen rules and planner bridge, `solver/solve.py` runs CP-SAT, `app/api/` exposes actions, and `components/tk/` contains the screens. Scheduling works without AI.
+
+## Setup
+
+Use **Node 22.13+ (22.x) or Node 24+**, with `node:sqlite` available, and **Python 3.9+** with venv/pip support.
 
 ```sh
 npm install
+npm run setup:solver
 npm run build
 npm start
 ```
 
-Open **http://localhost:3100** and set up your kitchen: resources and their capacity, then your menu with prep times and quality windows. Sensible starter values are filled in. No account or API key is required.
+`setup:solver` creates `.venv-solver` and installs OR-Tools there. Open **http://localhost:3100**, review the starter kitchen configuration and choose **Open the board**. The starter values are demo assumptions.
 
-Every device on the same Wi-Fi can open `http://<this-computer's-IP>:3100` and share the same live board. Keep the computer awake during service.
+For a separate, fresh demo after building:
 
-**To demo safely:** `npm run demo` starts a fresh, separate kitchen on port 3200 with its own data file (`data/demo.json`, reset each time). Your real kitchen isn't touched.
+```sh
+npm run demo
+```
 
-## During a shift
+Open **http://localhost:3200**. This command deletes `data/demo.db` and its SQLite sidecar files on every run, then starts with that database. Normal startup defaults to `data/timely.db`. Keep separate processes on separate database files.
 
-1. **New order:** tap dishes, then pick when the courier arrives, or **Not known yet**.
-2. **Up next** shows when to start each ticket and when it will be ready. Start what's due. Dishes are timed to finish together, longest first.
-3. **Cooking** shows each dish with its timer. Tap **Done** per dish, then **Packed and ready**, then **Picked up**.
-4. **Rush Recovery** (life ring, top bar) is for when the plan breaks: a courier early or late, an order needing more time, or equipment down. It simulates on a private copy and shows the result of keeping your order and of reordering, including who gets later. Approve one, or cancel and nothing changes.
-5. **Problem or change** on a ticket applies a quick fix directly. If a better order then appears, a banner names it, and **Review change** shows the tradeoff.
-6. **Undo** (top bar) reverses mistaken taps, or a whole approved change. **Shift report** shows what actually happened.
+## Happy-path demo
 
-Sample orders on an empty board are labeled, can be cleared, and never count in reports.
+Use made-up names and notes; this is a manual walkthrough, not evidence of a validated kitchen workflow.
 
-## How planning works
+1. **Setup:** run the commands above, open the fresh demo and review stations, equipment capacity, shared staff groups, menu steps and timing assumptions. Select **Open the board**.
+2. **New order:** choose **Delivery**, set a driver ETA of 20 minutes, and add a burger with **Well done**, fries and a shake. Add a fictional allergy note to exercise acknowledgement. Choose **Create draft**.
+3. **Draft receipt:** review the station schedule, modifiers, allergy flag, bag-ready target and explanation. Drafts may move when the board changes.
+4. **Release:** choose **Release to kitchen**. The tasks become issued instructions with a receipt version.
+5. **Print once:** open **Print** and print the receipt once. The app records print requests/counts; it cannot verify that paper physically printed.
+6. **Change driver ETA:** change the released order's ETA to now. Its issued schedule stays as printed; the earlier target makes it **AT RISK** with the estimated delay shown. Changing an ETA does not silently replace kitchen instructions.
+7. **Stations:** select each station, use **Start** when appropriate, then **DONE** when the work is actually finished. Keys **1–9** mark the corresponding visible card done, except while typing or a dialog is open. DONE without Start records an inferred start; timers never complete food automatically. Early actions may require a manager override and reason.
+8. **Packing:** once every food step is done, check all food, drinks and extras, acknowledge the allergy note, enter the item count (3 for this order), then **Seal bag**. Drinks count; extras and remakes do not add to the count. Note the assigned shelf slot.
+9. **Pickup:** enter the receipt's pickup code. Lookup only identifies the bag; choose **Confirm handoff** to record collection and free its shelf slot.
+10. **Remake:** create and release another order, finish its food, then use **Missing?** in Packing before sealing. Give a reason and send the item back to its station. Its linked remake is scheduled urgently and issued when a plan is available; finish it and recheck the item before sealing. A handed-off order cannot be remade; create a new order instead.
+11. **Rush Recovery:** with open orders, try a driver change, extra prep time, equipment outage or staff shortage. Review who becomes earlier/later and the risk warnings. Simulation uses a private database copy. Cancel to keep the board, or **Approve and replan drafts** to apply it.
+12. **Ask Praxis:** with AI configured, ask which orders are at risk, then request a specific change, such as one grill unit out for 20 minutes. Review its proposal and tap **Approve**. If the board changed, request fresh numbers. Without AI, this panel provides a local board summary only.
+13. **Mock outbound:** inspect the delivery receipt's outbound entry, **“Sent to DoorDash (mock)”**. Release and relevant ready-time updates write a local outbound log. No DoorDash request is sent.
 
-### Planner definitions
+## How scheduling works
 
-| Term | Meaning |
+Time is discretized into **30-second ticks**. Hard constraints cover durations, earliest starts, recipe dependencies, packing after all food/remake steps, equipment capacity, shared staff attendance and outage blocks. Recipes may have multiple dependent steps; packing consumes capacity too.
+
+The staged lexicographic objective preserves each earlier stage's achieved result while optimizing the next:
+
+1. Minimize total lateness against bag-ready targets.
+2. Minimize expected courier wait plus piecewise food-holding penalties over early/expected/late arrival scenarios, weighted **25/50/25 by default**.
+3. Minimize movement of already planned drafts.
+4. Finish components together and avoid finishing unnecessarily before the target.
+
+Remakes get an urgent-placement stage first. Weights, holding penalties and arrival ranges are configurable assumptions. Walk-in/phone orders use their promised pickup time. Targets subtract the configured pickup buffer. Stale driver estimates are flagged and their uncertainty range widens.
+
+**Locked work never moves automatically:** issued instructions retain their printed times; cooking and completed work retain their records. Updated projections account for missed starts and overruns without rewriting the receipt. A manager can withdraw unstarted instructions with a reason, review the replacement draft and release it again. Unrecoverable lateness is shown honestly as **AT RISK**, rather than hidden by an impossible promise. Targets are soft objectives, not hard feasibility constraints.
+
+Solver outcomes are **optimal** (all executed stages proven optimal), **feasible** (valid plan without full optimality proof), **infeasible** (no plan satisfies the constraints), or **unknown** (no conclusion, including timeout). Technical failures may report `invalid` or `error`; no planning work reports `skipped`. If a later optimization stage fails, the worker keeps its last feasible solution. If no feasible plan is returned, previous plans remain visible, failure/warnings are recorded, and new tasks may remain unplanned. An order without a plan cannot be released. Review warnings before relying on retained times.
+
+## Task states
+
+| State | Meaning |
 | --- | --- |
-| **Dish** | One unit on a ticket. 2 burgers are two dishes, each using one unit of capacity. |
-| **Resource** | A named station with a capacity: how many dishes it can work on at once. Resources are specialized: a dish uses the one its menu entry names. |
-| **Prep time** | Active minutes for one dish on its resource. A dish uses one resource, so multi-step recipes are modeled as their longest step. |
-| **Packing** | Minutes after the last dish finishes for bagging and checking (Settings, default 2). It uses no resource. |
-| **Ready** | Last dish finished, plus packing. |
-| **Courier wait** | Predicted minutes the courier stands at the counter before the order is ready. |
-| **Food sitting** | Predicted minutes a ready order waits for its courier to arrive. |
-| **Late** | Predicted minutes ready after the pickup deadline (courier arrival plus the grace period). |
-| **Past quality window** | Predicted minutes a dish will be older than its window at handoff, summed per dish. |
-| **Aging** | Minutes a ticket has waited to start beyond 20 minutes, not counting a deliberate hold, so tickets can't stay at the back forever. |
-| **Overrun** | Observed only: how much longer a dish took than its estimate. |
+| `PLANNED` | Draft work; the scheduler may move it. |
+| `ISSUED` | Released instruction; frozen until explicitly withdrawn. |
+| `COOKING` | Staff recorded a start; actual work is underway. |
+| `DONE` | Staff recorded completion; packing completes when the bag is sealed. |
 
-**Predicted** figures (board, reviews, Rush Recovery) are estimates from the current board. **Observed** figures (shift report) come only from what staff tapped.
+Order states are separate: draft, released, sealed, handed off or cancelled.
 
-### Choosing an order
+## API
 
-The planner decides which ticket gets capacity first. For each candidate order, every dish is placed on a minute-by-minute capacity timeline for its resource, working backward from the ticket's target finish so dishes finish together.
+JSON endpoints use internal order/task IDs in paths. Most kitchen actions return an updated `snapshot`; errors include a message and, for rule violations, a code. Mutation actions support `Idempotency-Key` (or `requestId`) for safe retries.
 
-- **Objective:** minimize `5 × late + 2 × courier wait + 1 × food sitting + 3 × aging + 3 × past quality window`, all in minutes.
-- **Search:** with up to 6 queued tickets, every possible order is checked. Longer queues use a deterministic heuristic (earliest-deadline insertion, then adjacent swaps), which finds a strong order rather than a proven best one, and the review screen says which was used. `npm run bench:planner` prints timings. On this machine: about 10 ms at 6 tickets of 3 dishes, 10 ms at 20, and 70 ms at 40.
-- **Work in progress:** dishes already cooking are never moved, and a started ticket keeps its place at the front. They also keep running through an equipment outage.
-
-### Freshness
-
-- Each dish has a quality window, and the kitchen sets a preparation buffer. Tickets are started so they finish that buffer ahead of the courier. Tickets show when to start and how long that is before pickup.
-- A courier time is trusted only while it's fresh. If it's unknown, older than the expiry in Settings, or already past, the ticket is flagged and **not held**: Praxis won't delay food based on a time nobody has confirmed. **Still right** re-confirms it.
-- Quality windows are preferences, not food-safety guarantees. Follow your own food-safety rules.
-
-### Keeping recommendations calm
-
-- A suggestion appears only when it's worth interrupting the line (a score drop of at least 6, with less total waiting, lateness, aging or quality loss). Ties keep your current order.
-- **Keep my order** silences that exact suggestion for 10 minutes. After an approval, the approved next ticket is protected for 3 minutes.
-- Approvals are tied to the board version they were shown on. If anything changes first, the approval is refused and the numbers must be reviewed again, so stale numbers can't be applied. Double taps apply once.
-- If nobody approves, the existing plan simply continues.
-
-The numbers are computed, never generated. The reference case (an in-progress order delayed 8 minutes on one lane) still takes courier waiting from 28 to 20 minutes and lateness from 22 to 14. The remaining lateness can't be recovered, and the app says so.
-
-## Current limits
-
-- **Orders aren't connected to any platform.** There is no live DoorDash or Uber Eats integration, because that requires partner API access. Orders are entered by tapping, and courier times don't update themselves.
-- **One step per dish.** A burger uses the grill, but not the grill and then assembly. Packing is a flat per-order time with no capacity limit. Batch cooking isn't modeled.
-- **One kitchen, one computer.** Data is one file at `data/service.json` (set `PRAXIS_DATA_FILE` to move it). Hosting without a persistent disk, such as Vercel, won't keep it.
-- **Voice entry** for menu dishes needs `localhost` or HTTPS, so it doesn't work over the plain phone address, and it isn't available in Firefox.
-
-## Security
-
-- **Passcode:** set `PRAXIS_PASSCODE` in `.env.local` to require a shared passcode on every device. It's off by default. Turn it on before using the board on any network you don't fully trust. It's a single shared passcode without per-person accounts, and traffic isn't encrypted without HTTPS, so don't expose port 3100 to the internet.
-- **Cross-site requests** that change the board are refused.
-- **Customer names** are stored unencrypted in the data file. Use made-up names in demos.
-- **API key:** the OpenRouter key stays on the server and is never sent to the browser. `.env.local` is gitignored.
+| Method | Path | Purpose / main inputs |
+| --- | --- | --- |
+| GET | `/api/state` | Current kitchen snapshot and server clock. |
+| POST | `/api/settings` | Save `config` and replan drafts. |
+| POST | `/api/orders` | Create draft: `channel`, `items`, names, ETA or promised minutes, notes. |
+| POST | `/api/orders/{id}/{action}` | `eta`, `issue`, `withdraw`, `cancel`, `check`, `allergen`, `seal`, `handoff`, `remake`, `print`. Action-specific inputs include ETA `minutes`, withdrawal/remake `reason`, check `key`/`checked`, seal `count`, and handoff `code`. |
+| POST | `/api/tasks/{id}` | `action`: `start`, `done`, `reopen`, `extend`; optional batch scope, override/reason, extra minutes. |
+| POST | `/api/pickup` | Read-only pickup lookup using `code`. |
+| POST | `/api/capacity` | Station/pool outage: `kind`, `id`, `unitsOut`, `minutes`. |
+| POST | `/api/sample` | Load synthetic orders; `action: "clear"` clears samples. |
+| POST | `/api/simulate` | Try `changes` on a private copy. |
+| POST | `/api/approve` | Apply `changes` against `baseRev`; stale proposals are rejected. |
+| POST | `/api/assistant` | Chat `messages`; local summary or optional AI proposal. |
+| GET | `/api/report` | Shift report from recorded events; sample orders excluded. |
+| POST | `/api/login` | Shared-passcode session using `passcode`. |
 
 ## AI (optional)
 
-Without a key, everything above still works: **Ask Praxis** gives a plan summary. To add AI:
+Set `OPENROUTER_API_KEY` in `.env.local` (copy `.env.example` as a starting point). The default model is `anthropic/claude-haiku-5.5`. Tools are `get_board`, `what_if`, `propose_changes` and `explain_order`. Scheduling and comparisons come from the kitchen engine and solver. Changes require a person's approval; chat cannot approve them.
+
+The assistant cannot release, start, finish, pack, seal or hand off orders, print receipts, or reopen work. Structured board facts omit customer names, driver names and pickup codes. **Anything typed into chat is sent as written**, so do not include those identifiers in questions. Item names/modifiers can also contain staff-entered text. The key stays on the server.
+
+Assistant and simulation requests share an in-memory limit of **2 concurrent requests and 20 per minute** across devices; restart resets it. AI calls allow up to 5 steps, 500 output tokens and a 40-second timeout, with one retry. Missing/unavailable AI falls back to a local board summary.
+
+## Security and voice
+
+`PRAXIS_PASSCODE` optionally requires a shared passcode. Cross-site API writes are rejected. This is shared access, not individual accounts or manager roles; traffic needs HTTPS for encryption. Customer information is stored unencrypted in SQLite. Use fictional data for demos and do not expose an unprotected board publicly. DoorDash outbound messages are local mocks only.
+
+Voice entry adds **menu dishes in Settings** using browser speech recognition. It requires microphone permission, browser support and **localhost or HTTPS**; a plain HTTP LAN address is insufficient. Typed entry remains available.
+
+## Environment variables
+
+| Variable | Purpose / default |
+| --- | --- |
+| `OPENROUTER_API_KEY` | Optional server-side AI key; absent means local summary. |
+| `OPENROUTER_MODEL` | `anthropic/claude-haiku-5.5`. |
+| `OPENROUTER_BASE_URL` | Optional compatible endpoint; defaults to `https://openrouter.ai/api/v1`. |
+| `PRAXIS_PASSCODE` | Optional shared access passcode; disabled when unset. |
+| `PRAXIS_TIMEZONE` | Initial restaurant time-zone default; otherwise the computer's zone. Review saved Settings. |
+| `PRAXIS_DB_FILE` | SQLite path; defaults to `data/timely.db`. |
+| `PRAXIS_PYTHON` | Python with OR-Tools; otherwise `.venv-solver/bin/python`, then `python3`. |
+
+## Tests
 
 ```sh
-cp .env.example .env.local   # then set OPENROUTER_API_KEY
-```
-
-The default model is `anthropic/claude-haiku-5.5`, chosen for reliable tool use at low cost. Set `OPENROUTER_MODEL` to use another model with tools.
-
-**Ask Praxis** is an agent with three tools: `get_board` reads the board, `what_if` tests changes on a private copy using the real planner, and `propose_changes` validates changes and shows an **Approve** card.
-
-Guardrails:
-
-- The model never does the scheduling. Times and every before-and-after number come from the planner, and the approval card's text is generated from the validated change, not written by the model.
-- It can't change anything itself. Only an Approve tap does, those changes apply all-or-nothing, and one Undo reverses them. It can't mark dishes started, done or picked up.
-- Tool inputs have strict types and limits. Dish names and notes are treated as data: instructions hidden in them are ignored.
-- Each question is limited to 5 model steps, 500 output tokens per step, and 20 seconds. Across all devices the board allows 2 AI requests at a time and 20 per minute.
-- The assistant receives ticket numbers, items, times and the menu, not customer names. Anything typed into a question is sent as written.
-- If AI is unavailable, Praxis falls back to the built-in behavior.
-
-## Development
-
-```sh
-npm run dev            # hot reload on port 3100
-npm test               # planner, shift rules, storage, tickets, sessions and the assistant
-npm run bench:planner
+npm test
 npm run build
 npx playwright install chromium
-npm run test:ui        # needs a current build; starts its own server on 3101 with throwaway data
+npm run test:ui
+npm run bench:solver
 ```
 
-`lib/engine.ts` is the planner, `lib/service.ts` holds the shift rules, `lib/changes.ts` runs simulations, `lib/agent.ts` is the assistant, `lib/store.ts` handles saving, and `components/` holds the screens. Saved kitchens from older versions upgrade automatically: each old station becomes a unit of one "Line" resource.
+Unit/scenario tests exercise kitchen rules and solver behavior; install the solver first. UI configuration expects a production build, starts port 3101 and uses a throwaway SQLite database. **This checkout currently has no `tests/ui.spec.ts`, which the Playwright configuration selects, so `test:ui` has no matching suite until it is restored.** Solver benchmarks report local timings, not service-readiness evidence.
 
-The slide deck at `/demo/index.html` shows an earlier scripted demo, and its screenshots predate this version.
+## Limits and not done
+
+- Prep times, staff attendance, arrival uncertainty and holding penalties are demo assumptions, not verified kitchen measurements or food-safety guarantees.
+- DoorDash is mock-only. Orders and driver estimates are entered manually; there are no real DoorDash API calls.
+- Screens poll every **2 seconds**; there is no WebSocket transport.
+- Intended for one application process and one persistent SQLite file, not distributed deployment.
+- Authentication is a shared passcode only; no individual accounts, role enforcement or separate manager credentials.
+- Cross-order batching is not supported; compatible portions may batch within an order.
+- Old JSON data in `data/service.json` is **not migrated**.
+- Remaking a sealed bag requires an explicit manager exception to reopen it; it is not the normal packing path.
+- A shadow pilot with measured kitchen timings, real staff procedures and observed outcomes is needed before real use.

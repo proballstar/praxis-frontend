@@ -8,8 +8,9 @@
     "start": "next start --hostname 0.0.0.0 --port 3100",
     "test": "tsx --test tests/*.test.ts",
     "test:ui": "playwright test",
-    "bench:planner": "tsx scripts/bench-planner.ts",
-    "demo": "rm -f data/demo.json && PRAXIS_DATA_FILE=data/demo.json next start --hostname 0.0.0.0 --port 3200"
+    "demo": "rm -f data/demo.db data/demo.db-wal data/demo.db-shm && PRAXIS_DB_FILE=data/demo.db next start --hostname 0.0.0.0 --port 3200",
+    "setup:solver": "python3 -m venv .venv-solver && ./.venv-solver/bin/pip install --quiet ortools && ./.venv-solver/bin/python -c \"import ortools; print('OR-Tools', ortools.__version__, 'ready')\"",
+    "bench:solver": "tsx scripts/bench-solver.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.86",
